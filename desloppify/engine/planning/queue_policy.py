@@ -37,20 +37,19 @@ def build_open_plan_queue(
 ) -> WorkQueueResult:
     """Build one open-status queue with consistent planning policy defaults."""
     policy = policy or OpenPlanQueuePolicy()
-    resolved_scan_path: str | None
-    if isinstance(policy.scan_path, str):
-        resolved_scan_path = policy.scan_path
-    else:
-        raw_state_path = state.get("scan_path")
-        resolved_scan_path = raw_state_path if isinstance(raw_state_path, str) else None
+    # When policy.scan_path is explicitly set, override the auto-default.
+    # Otherwise let QueueBuildOptions read from state automatically.
+    scan_path_kwarg: dict = (
+        {"scan_path": policy.scan_path} if policy.scan_path is not None else {}
+    )
     return build_work_queue(
         state,
         options=QueueBuildOptions(
             count=policy.count,
-            scan_path=resolved_scan_path,
             status="open",
             include_subjective=policy.include_subjective,
             subjective_threshold=_subjective_threshold(state),
+            **scan_path_kwarg,
         ),
     )
 

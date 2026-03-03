@@ -11,6 +11,7 @@ from desloppify.app.commands.resolve.render_support import (
     print_strict_gap_note,
     score_snapshot_or_warn,
 )
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_api import colorize
 
 
@@ -231,7 +232,7 @@ def render_commit_guidance(
         print(colorize("\n  After committing → `desloppify plan commit-log record`", "dim"))
         print(colorize("  ─────────────────────────────────────────────", "dim"))
 
-    except (ImportError, OSError, ValueError, KeyError, TypeError):
+    except PLAN_LOAD_EXCEPTIONS:
         logging.getLogger(__name__).debug(
             "commit guidance rendering skipped", exc_info=True,
         )

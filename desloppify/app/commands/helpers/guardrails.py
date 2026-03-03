@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, field
 
 from desloppify.app.commands.helpers.display import short_finding_id
-from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS, CommandError
 from desloppify.core.output_api import colorize
 from desloppify.engine.plan import (
     compute_new_finding_ids,
@@ -91,30 +90,22 @@ def require_triage_current_or_exit(
         return
 
     new_ids = result.new_ids
-    print(colorize(
-        f"\n  BLOCKED: {len(new_ids) or 'some'} new review finding(s) have not been triaged.",
-        "red",
-    ))
+    lines = [
+        f"BLOCKED: {len(new_ids) or 'some'} new review finding(s) have not been triaged."
+    ]
     if new_ids:
         for fid in sorted(new_ids)[:5]:
             f = state.get("findings", {}).get(fid, {})
-            print(colorize(f"    * [{short_finding_id(fid)}] {f.get('summary', '')}", "red"))
+            lines.append(f"    * [{short_finding_id(fid)}] {f.get('summary', '')}")
         if len(new_ids) > 5:
-            print(colorize(f"    ... and {len(new_ids) - 5} more", "dim"))
-    print()
-    print(colorize("  NEXT STEP: desloppify plan triage", "yellow"))
-    print(colorize(
-        "  (Review new findings, then either --confirm-existing or re-plan.)",
-        "dim",
-    ))
-    print()
-    print(colorize("  View new items:  desloppify plan queue --sort recent", "dim"))
-    print(colorize(
-        '  To bypass: --force-resolve --attest "I understand the plan may be stale..."',
-        "dim",
-    ))
-    print()
-    sys.exit(1)
+            lines.append(f"    ... and {len(new_ids) - 5} more")
+    lines.append("")
+    lines.append("  NEXT STEP: desloppify plan triage")
+    lines.append("  (Review new findings, then either --confirm-existing or re-plan.)")
+    lines.append("")
+    lines.append("  View new items:  desloppify plan queue --sort recent")
+    lines.append('  To bypass: --force-resolve --attest "I understand the plan may be stale..."')
+    raise CommandError("\n".join(lines))
 
 
 __all__ = [

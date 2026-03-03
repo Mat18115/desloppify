@@ -374,8 +374,8 @@ def test_detect_monster_function(tmp_path):
     assert "monster_function" in ids
 
 
-def test_detect_dead_function(tmp_path):
-    """Detects functions with empty body or only return null."""
+def test_detect_stub_function(tmp_path):
+    """Detects stub functions with empty body or only return null (severity low)."""
 
     _write(
         tmp_path,
@@ -384,9 +384,10 @@ def test_detect_dead_function(tmp_path):
     )
     entries, _ = detect_smells(tmp_path)
     ids = {e["id"] for e in entries}
-    assert "dead_function" in ids
-    dead = next(e for e in entries if e["id"] == "dead_function")
-    assert dead["count"] == 2
+    assert "stub_function" in ids
+    stub = next(e for e in entries if e["id"] == "stub_function")
+    assert stub["count"] == 2
+    assert stub["severity"] == "low"
 
 
 def test_detect_catch_return_default(tmp_path):

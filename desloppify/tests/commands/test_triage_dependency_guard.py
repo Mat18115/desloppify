@@ -1,4 +1,4 @@
-"""Tests for triage dependency chain validation in cmd_plan_done."""
+"""Tests for triage dependency chain validation in cmd_plan_resolve."""
 
 from __future__ import annotations
 
@@ -70,11 +70,11 @@ class TestBlockedTriageStages:
         assert _blocked_triage_stages(plan) == {}
 
 
-# ── Integration tests through cmd_plan_done ────────────────
+# ── Integration tests through cmd_plan_resolve ────────────────
 
 
-def test_plan_done_rejects_blocked_triage_stage(monkeypatch, capsys):
-    """cmd_plan_done refuses to resolve triage::reflect when observe is incomplete."""
+def test_plan_resolve_rejects_blocked_triage_stage(monkeypatch, capsys):
+    """cmd_plan_resolve refuses to resolve triage::reflect when observe is incomplete."""
     plan = _plan_with_triage_stages()  # nothing confirmed
 
     monkeypatch.setattr(override_mod, "load_plan", lambda *a, **kw: plan)
@@ -83,7 +83,7 @@ def test_plan_done_rejects_blocked_triage_stage(monkeypatch, capsys):
     monkeypatch.setattr(override_mod, "save_plan", lambda p, *a, **kw: saved_plans.append(p))
 
     args = _args(patterns=["triage::reflect"])
-    override_mod.cmd_plan_done(args)
+    override_mod.cmd_plan_resolve(args)
 
     out = capsys.readouterr().out
     assert "Cannot resolve" in out
@@ -92,8 +92,8 @@ def test_plan_done_rejects_blocked_triage_stage(monkeypatch, capsys):
     assert len(saved_plans) == 0
 
 
-def test_plan_done_allows_unblocked_triage_stage(monkeypatch, capsys):
-    """cmd_plan_done resolves triage::reflect when observe is already confirmed."""
+def test_plan_resolve_allows_unblocked_triage_stage(monkeypatch, capsys):
+    """cmd_plan_resolve resolves triage::reflect when observe is already confirmed."""
     plan = _plan_with_triage_stages("observe")  # observe confirmed
 
     monkeypatch.setattr(override_mod, "load_plan", lambda *a, **kw: plan)
@@ -102,14 +102,14 @@ def test_plan_done_allows_unblocked_triage_stage(monkeypatch, capsys):
     monkeypatch.setattr(override_mod, "save_plan", lambda p, *a, **kw: saved_plans.append(p))
 
     args = _args(patterns=["triage::reflect"])
-    override_mod.cmd_plan_done(args)
+    override_mod.cmd_plan_resolve(args)
 
     out = capsys.readouterr().out
     assert "Resolved" in out
     assert len(saved_plans) == 1
 
 
-def test_plan_done_force_resolve_overrides_block(monkeypatch, capsys):
+def test_plan_resolve_force_resolve_overrides_block(monkeypatch, capsys):
     """--force-resolve allows resolving a blocked triage stage."""
     plan = _plan_with_triage_stages()  # nothing confirmed
 
@@ -119,7 +119,7 @@ def test_plan_done_force_resolve_overrides_block(monkeypatch, capsys):
     monkeypatch.setattr(override_mod, "save_plan", lambda p, *a, **kw: saved_plans.append(p))
 
     args = _args(patterns=["triage::reflect"], force_resolve=True)
-    override_mod.cmd_plan_done(args)
+    override_mod.cmd_plan_resolve(args)
 
     out = capsys.readouterr().out
     # Warning is still shown but it proceeds
@@ -127,7 +127,7 @@ def test_plan_done_force_resolve_overrides_block(monkeypatch, capsys):
     assert len(saved_plans) == 1
 
 
-def test_plan_done_observe_is_never_blocked(monkeypatch, capsys):
+def test_plan_resolve_observe_is_never_blocked(monkeypatch, capsys):
     """triage::observe has no dependencies — always resolvable."""
     plan = _plan_with_triage_stages()  # nothing confirmed
 
@@ -137,7 +137,7 @@ def test_plan_done_observe_is_never_blocked(monkeypatch, capsys):
     monkeypatch.setattr(override_mod, "save_plan", lambda p, *a, **kw: saved_plans.append(p))
 
     args = _args(patterns=["triage::observe"])
-    override_mod.cmd_plan_done(args)
+    override_mod.cmd_plan_resolve(args)
 
     out = capsys.readouterr().out
     assert "Resolved" in out

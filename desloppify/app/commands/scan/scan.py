@@ -23,7 +23,7 @@ from desloppify.app.commands.scan.scan_helpers import (  # noqa: F401 (re-export
     _resolve_scan_profile,
     _warn_explicit_lang_with_no_files,
 )
-from desloppify.app.commands.scan.scan_reporting_analysis import (
+from desloppify.app.commands.scan.reporting.integrity_report import (
     show_post_scan_analysis,
 )
 from desloppify.app.commands.scan.scan_reporting_dimensions import (

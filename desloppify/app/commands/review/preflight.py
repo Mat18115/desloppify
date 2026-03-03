@@ -10,9 +10,9 @@ from __future__ import annotations
 import re
 import sys
 
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
-from desloppify.engine.plan import compute_subjective_visibility
-from desloppify.engine.work_queue import QueueBuildOptions, build_work_queue
+from desloppify.engine.work_queue import queue_context
 from desloppify.state import StateModel, save_state
 
 from .helpers import parse_dimensions
@@ -64,44 +64,6 @@ def _normalize_dimension_key(raw: object) -> str:
     return re.sub(r"[^a-z0-9_]+", "_", text).strip("_")
 
 
-def _count_open_subjective_queue_items(
-    state: StateModel,
-    *,
-    dimensions: set[str] | None = None,
-    policy=None,
-) -> int:
-    """Count open synthetic subjective queue items for rerun gating."""
-    normalized_dims = (
-        {_normalize_dimension_key(dim) for dim in dimensions}
-        if dimensions is not None
-        else None
-    )
-    queue = build_work_queue(
-        state,
-        options=QueueBuildOptions(
-            status="open",
-            include_subjective=True,
-            count=None,
-            policy=policy,
-        ),
-    )
-    count = 0
-    for item in queue.get("items", []):
-        if item.get("kind") != "subjective_dimension":
-            continue
-        # Stale reruns are not blocking backlog — they ARE the work
-        if item.get("stale_review"):
-            continue
-        if normalized_dims is None:
-            count += 1
-            continue
-        detail = item.get("detail")
-        raw_dim = detail.get("dimension", "") if isinstance(detail, dict) else ""
-        item_dim = _normalize_dimension_key(raw_dim)
-        if item_dim and item_dim in normalized_dims:
-            count += 1
-    return count
-
 
 def _blocking_scored_dimensions(
     state: StateModel,
@@ -125,14 +87,12 @@ def _objective_and_subjective_backlog(
     *,
     blocking_dims: list[str],
 ) -> tuple[int, int]:
-    policy = compute_subjective_visibility(state)
-    objective_total = policy.objective_count
-    subjective_total = _count_open_subjective_queue_items(
-        state,
-        dimensions=set(blocking_dims),
-        policy=policy,
-    )
-    return objective_total, subjective_total
+    ctx = queue_context(state)
+    objective_total = ctx.policy.objective_count
+    # Subjective dimensions are resolved BY running reviews, so they never
+    # block review --prepare (that would be circular).  Only objective
+    # findings constitute genuine blocking backlog.
+    return objective_total, 0
 
 
 def _print_backlog_blocked_message(
@@ -244,7 +204,11 @@ def review_rerun_preflight(
                     subjective_total=subjective_total,
                     dimensions=dimensions,
                 )
-                sys.exit(1)
+                raise CommandError(
+                    f"rerun blocked: open backlog (objective: {objective_total}, "
+                    f"subjective: {subjective_total})",
+                    exit_code=1,
+                )
 
     # Gate passed — clear stale for targeted dims
     cleared = clear_stale_subjective_entries(state, dimensions=dimensions)

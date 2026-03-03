@@ -6,6 +6,8 @@ import argparse
 import json
 import logging
 
+_logger = logging.getLogger(__name__)
+
 from desloppify import state as state_mod
 from desloppify.app.commands.helpers.lang import resolve_lang
 from desloppify.app.commands.helpers.queue_progress import (
@@ -38,6 +40,7 @@ from desloppify.app.commands.status_parts.render import (
     write_status_query,
 )
 from desloppify.engine.plan import load_plan
+from desloppify.engine.work_queue import queue_context
 from desloppify.engine.planning.scorecard_projection import (
     scorecard_dimensions_payload,
 )
@@ -107,15 +110,20 @@ def cmd_status(args: argparse.Namespace) -> None:
     )
     ignores = config.get("ignore", [])
 
-    _breakdown = _print_score_section(state, scores, _plan, target_strict_score)
+    # Build unified context once — plan, target_strict, and policy all agree.
+    _ctx = queue_context(
+        state,
+        config=config,
+        plan=_plan_active,
+        target_strict=target_strict_score,
+    )
+
+    _breakdown = _print_score_section(state, scores, _plan, target_strict_score, _ctx)
     print_scan_metrics(state)
     print_open_scope_breakdown(state)
     print_scan_completeness(state)
 
-    # Compute objective backlog once for consistent subjective actionability gating
-    from desloppify.engine.plan import compute_subjective_visibility
-    _policy = compute_subjective_visibility(state, target_strict=target_strict_score)
-    _objective_backlog = _policy.objective_count
+    _objective_backlog = _ctx.policy.objective_count
 
     if dim_scores:
         show_dimension_table(state, dim_scores, objective_backlog=_objective_backlog)
@@ -142,8 +150,8 @@ def cmd_status(args: argparse.Namespace) -> None:
     try:
         from desloppify.app.commands.next_parts.render import render_uncommitted_reminder
         render_uncommitted_reminder(_plan_active)
-    except (ImportError, OSError, ValueError, KeyError, TypeError):
-        pass
+    except PLAN_LOAD_EXCEPTIONS:
+        _logger.debug("commit tracking reminder skipped", exc_info=True)
 
     show_agent_plan(narrative, plan=_plan_active)
 
@@ -178,14 +186,14 @@ def cmd_status(args: argparse.Namespace) -> None:
     )
 
 
-def _print_score_section(state, scores, plan, target_strict_score):
+def _print_score_section(state, scores, plan, target_strict_score, ctx=None):
     """Print score header: frozen plan-start or live score with queue breakdown."""
     plan_start_strict = get_plan_start_strict(plan)
     breakdown = None
     queue_remaining = 0
     if plan_start_strict is not None:
         try:
-            breakdown = plan_aware_queue_breakdown(state, plan)
+            breakdown = plan_aware_queue_breakdown(state, plan, context=ctx)
             queue_remaining = breakdown.queue_total
         except PLAN_LOAD_EXCEPTIONS as exc:
             logging.debug("Plan-aware queue count failed: %s", exc)
@@ -206,7 +214,7 @@ def _print_score_section(state, scores, plan, target_strict_score):
         # Show queue breakdown even without frozen score
         if breakdown is None:
             try:
-                breakdown = plan_aware_queue_breakdown(state, plan)
+                breakdown = plan_aware_queue_breakdown(state, plan, context=ctx)
             except PLAN_LOAD_EXCEPTIONS:
                 breakdown = None
         if breakdown is not None and breakdown.queue_total > 0:

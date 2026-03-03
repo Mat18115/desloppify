@@ -337,7 +337,8 @@ def test_holistic_subjective_review_finding_points_to_holistic_refresh():
 def test_queue_build_options_defaults():
     opts = QueueBuildOptions()
     assert opts.count == 1
-    assert opts.scan_path is None
+    from desloppify.engine._work_queue.core import _SCAN_PATH_FROM_STATE
+    assert opts.scan_path is _SCAN_PATH_FROM_STATE
     assert opts.scope is None
     assert opts.status == "open"
     assert opts.include_subjective is True

@@ -6,6 +6,7 @@ import pytest
 
 import desloppify.app.commands.detect as detect_mod
 from desloppify.app.commands.detect import cmd_detect
+from desloppify.core.exception_sets import CommandError
 
 
 class _FakeLangBase:
@@ -58,9 +59,9 @@ class TestCmdDetect:
             path = "."
             threshold = None
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_detect(FakeArgs())
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     def test_unknown_detector_exits(self, monkeypatch):
         """When detector name is invalid for the language, should exit."""
@@ -78,9 +79,9 @@ class TestCmdDetect:
             path = "."
             threshold = None
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_detect(FakeArgs())
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     def test_valid_detector_dispatches(self, monkeypatch):
         """When detector is valid, it should be called."""
@@ -202,9 +203,9 @@ class TestCmdDetect:
             path = "."
             threshold = None
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_detect(FakeArgs())
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     def test_runtime_options_are_passed_without_lang_run_shim(self, monkeypatch):
         """Detector commands receive normalized runtime options via args payload."""

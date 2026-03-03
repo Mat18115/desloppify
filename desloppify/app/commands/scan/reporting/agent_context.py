@@ -47,7 +47,7 @@ def _print_score_lines(
     overall_score: float | None,
     objective_score: float | None,
     strict_score: float | None,
-    verified_score: float | None,
+    verified_strict_score: float | None,
 ) -> None:
     lines: list[str] = []
     if overall_score is not None:
@@ -56,8 +56,8 @@ def _print_score_lines(
         lines.append(f"Objective score: {objective_score:.1f}/100")
     if strict_score is not None:
         lines.append(f"Strict score:    {strict_score:.1f}/100")
-    if verified_score is not None:
-        lines.append(f"Verified score:  {verified_score:.1f}/100")
+    if verified_strict_score is not None:
+        lines.append(f"Verified score:  {verified_strict_score:.1f}/100")
     if lines:
         print("\n".join(lines))
     # Score legend — always shown in LLM block so agents understand the scoring model
@@ -297,7 +297,7 @@ def print_llm_summary(
         overall_score=scores.overall,
         objective_score=scores.objective,
         strict_score=scores.strict,
-        verified_score=scores.verified,
+        verified_strict_score=scores.verified,
     )
     _print_dimension_table(state, dim_scores)
     _print_drag_summary(dim_scores)

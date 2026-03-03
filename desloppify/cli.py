@@ -9,6 +9,7 @@ from pathlib import Path
 from desloppify.app.cli_support.parser import create_parser as _create_parser
 from desloppify.app.commands.registry import get_command_handlers
 from desloppify.app.commands.helpers.lang import LangResolutionError, resolve_lang
+from desloppify.core.exception_sets import CommandError
 from desloppify.app.commands.helpers.runtime import CommandRuntime
 from desloppify.app.commands.helpers.state import state_path
 from desloppify.core.registry import detector_names, on_detector_registered
@@ -151,6 +152,9 @@ def main() -> None:
 
             handler = _resolve_handler(args.command)
             handler(args)
+    except CommandError as exc:
+        print(colorize(f"  {exc.message}", "red"), file=sys.stderr)
+        sys.exit(exc.exit_code)
     except LangResolutionError as exc:
         print(colorize(f"  {exc.message}", "red"), file=sys.stderr)
         sys.exit(1)

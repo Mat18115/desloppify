@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,7 +31,7 @@ from desloppify.intelligence.review.importing.contracts import (
     ReviewImportPayload,
 )
 from desloppify.app.commands.helpers.display import short_finding_id
-from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS, CommandError
 from desloppify.core.output_api import colorize
 
 _SCORECARD_SUBJECTIVE_AT_TARGET = bind_scorecard_subjective_at_target(
@@ -162,16 +161,18 @@ def _print_review_import_sync(state: dict, result: ReviewImportSyncResult) -> No
     ))
 
 
-def _sync_plan_after_review_change(state: dict, diff: dict) -> None:
-    """Best-effort: sync living plan after review import introduces new findings.
+def _sync_plan_after_import(state: dict, diff: dict, assessment_mode: str) -> None:
+    """All post-import plan syncs. Load once, save once.
 
-    Also auto-resolves subjective dimension queue items that were covered
-    by this import and injects ``workflow::create-plan`` when all initial
-    reviews are complete.
+    Phase 1 (finding sync): Only when new/reopened findings arrived — adds them
+    to queue, auto-resolves covered subjective items.
+    Phase 2 (workflow items): Always — injects score-checkpoint, create-plan,
+    import-scores, and communicate-score workflow items as needed.
     """
     try:
         from desloppify.engine.plan import (
             append_log_entry,
+            current_unscored_ids,
             has_living_plan,
             load_plan,
             purge_ids,
@@ -180,59 +181,96 @@ def _sync_plan_after_review_change(state: dict, diff: dict) -> None:
             sync_plan_after_review_import,
             sync_score_checkpoint_needed,
         )
+        from desloppify.engine._plan.stale_dimensions import (
+            sync_communicate_score_needed,
+            sync_import_scores_needed,
+        )
 
         if not has_living_plan():
             return
 
         plan = load_plan()
-        result = sync_plan_after_review_import(plan, state)
+        dirty = False
 
-        # Auto-resolve subjective dimension items that are no longer unscored
-        from desloppify.engine.plan import current_unscored_ids
-        still_unscored = current_unscored_ids(state)
-        order = plan.get("queue_order", [])
-        subjective_in_queue = [
-            fid for fid in order if fid.startswith("subjective::")
-        ]
-        covered_ids = [
-            fid for fid in subjective_in_queue
-            if fid not in still_unscored
-        ]
-        if covered_ids:
-            purge_ids(plan, covered_ids)
+        # Phase 1: Finding sync (only when new/reopened findings arrived)
+        has_new_findings = (
+            int(diff.get("new", 0) or 0) > 0
+            or int(diff.get("reopened", 0) or 0) > 0
+        )
+        import_result = None
+        covered_ids: list[str] = []
+        if has_new_findings:
+            import_result = sync_plan_after_review_import(plan, state)
+            if import_result is not None:
+                dirty = True
 
-        # Check if score checkpoint and create-plan items should be injected
+            # Auto-resolve subjective dimension items that are no longer unscored
+            still_unscored = current_unscored_ids(state)
+            order = plan.get("queue_order", [])
+            covered_ids = [
+                fid for fid in order
+                if fid.startswith("subjective::") and fid not in still_unscored
+            ]
+            if covered_ids:
+                purge_ids(plan, covered_ids)
+                dirty = True
+
+        # Phase 2: Workflow items (always)
+        injected_parts: list[str] = []
+
         checkpoint_result = sync_score_checkpoint_needed(plan, state)
+        if checkpoint_result.changes:
+            dirty = True
+            injected_parts.append("`workflow::score-checkpoint`")
+
+        scores_imported = assessment_mode in (
+            "trusted_internal", "attested_external", "manual_override",
+        )
+        import_scores_result = sync_import_scores_needed(
+            plan, state, assessment_mode=assessment_mode,
+        )
+        if import_scores_result.changes:
+            dirty = True
+            injected_parts.append("`workflow::import-scores`")
+
+        communicate_result = sync_communicate_score_needed(
+            plan, state, scores_just_imported=scores_imported,
+        )
+        if communicate_result.changes:
+            dirty = True
+            injected_parts.append("`workflow::communicate-score`")
+
         create_plan_result = sync_create_plan_needed(plan, state)
-        if checkpoint_result.injected or create_plan_result.injected:
-            parts = []
-            if checkpoint_result.injected:
-                parts.append("`workflow::score-checkpoint`")
-            if create_plan_result.injected:
-                parts.append("`workflow::create-plan`")
+        if create_plan_result.changes:
+            dirty = True
+            injected_parts.append("`workflow::create-plan`")
+
+        # Save once
+        if dirty:
+            if import_result is not None:
+                append_log_entry(
+                    plan,
+                    "review_import_sync",
+                    actor="system",
+                    detail={
+                        "trigger": "review_import",
+                        "new_ids": sorted(import_result.new_ids),
+                        "added_to_queue": import_result.added_to_queue,
+                        "diff_new": diff.get("new", 0),
+                        "diff_reopened": diff.get("reopened", 0),
+                        "covered_subjective": covered_ids,
+                    },
+                )
+            save_plan(plan)
+
+        # Print results
+        if import_result is not None:
+            _print_review_import_sync(state, import_result)
+        if injected_parts:
             print(colorize(
-                f"  Plan: reviews complete — {' and '.join(parts)} queued. Run `desloppify next`.",
+                f"  Plan: {' and '.join(injected_parts)} queued. Run `desloppify next`.",
                 "cyan",
             ))
-
-        if result is not None:
-            append_log_entry(
-                plan,
-                "review_import_sync",
-                actor="system",
-                detail={
-                    "trigger": "review_import",
-                    "new_ids": sorted(result.new_ids),
-                    "added_to_queue": result.added_to_queue,
-                    "diff_new": diff.get("new", 0),
-                    "diff_reopened": diff.get("reopened", 0),
-                    "covered_subjective": covered_ids,
-                },
-            )
-
-        save_plan(plan)
-        if result is not None:
-            _print_review_import_sync(state, result)
     except PLAN_LOAD_EXCEPTIONS as exc:
         print(
             colorize(
@@ -273,8 +311,7 @@ def do_import(
             override_attest=override_attest,
         )
     except ImportFlagValidationError as exc:
-        print(colorize(f"  Error: {exc}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(str(exc), exit_code=1) from exc
 
     try:
         findings_data = import_helpers_mod.load_import_findings_data(
@@ -295,7 +332,7 @@ def do_import(
             import_file=str(import_file),
             colorize_fn=colorize,
         )
-        sys.exit(1)
+        raise CommandError("import payload validation failed", exit_code=1) from exc
     assessment_policy: AssessmentImportPolicyModel = (
         import_helpers_mod.assessment_policy_model_from_payload(findings_data)
     )
@@ -335,30 +372,17 @@ def do_import(
         )
 
     if diff.get("skipped", 0) > 0 and not allow_partial:
-        print(
-            colorize(
-                "  Error: import produced skipped finding(s); refusing partial import.",
-                "red",
-            ),
-            file=sys.stderr,
-        )
+        details_lines: list[str] = []
         for detail in diff.get("skipped_details", []):
             reasons = "; ".join(detail.get("missing", []))
-            print(
-                colorize(
-                    f"    #{detail.get('index', '?')} ({detail.get('identifier', '<none>')}): {reasons}",
-                    "red",
-                ),
-                file=sys.stderr,
+            details_lines.append(
+                f"  #{detail.get('index', '?')} ({detail.get('identifier', '<none>')}): {reasons}"
             )
-        print(
-            colorize(
-                "  Fix the payload and retry, or pass --allow-partial to override.",
-                "yellow",
-            ),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        msg = "import produced skipped finding(s); refusing partial import."
+        if details_lines:
+            msg += "\n" + "\n".join(details_lines)
+        msg += "\nFix the payload and retry, or pass --allow-partial to override."
+        raise CommandError(msg, exit_code=1)
 
     if assessment_policy.assessments_present:
         audit = working_state.setdefault("assessment_import_audit", [])
@@ -380,9 +404,8 @@ def do_import(
     state.update(working_state)
     state_mod.save_state(state, state_file)
 
-    # Sync living plan when new or reopened findings arrived
-    if int(diff.get("new", 0) or 0) > 0 or int(diff.get("reopened", 0) or 0) > 0:
-        _sync_plan_after_review_change(state, diff)
+    # Sync plan: finding sync (if new findings) + workflow items (always).
+    _sync_plan_after_import(state, diff, assessment_policy.mode)
 
     _print_import_results(
         state=state,
@@ -500,8 +523,7 @@ def do_validate_import(
             override_attest=override_attest,
         )
     except ImportFlagValidationError as exc:
-        print(colorize(f"  Error: {exc}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(str(exc), exit_code=1) from exc
 
     try:
         findings_data = import_helpers_mod.load_import_findings_data(
@@ -520,7 +542,7 @@ def do_validate_import(
             import_file=str(import_file),
             colorize_fn=colorize,
         )
-        sys.exit(1)
+        raise CommandError("import payload validation failed", exit_code=1) from exc
     assessment_policy = import_helpers_mod.assessment_policy_model_from_payload(
         findings_data
     )

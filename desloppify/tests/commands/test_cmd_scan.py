@@ -675,7 +675,7 @@ class TestShowPostScanAnalysis:
                 "headline": "Test headline",
                 "actions": [
                     {
-                        "command": "desloppify fix unused-imports",
+                        "command": "desloppify autofix unused-imports",
                         "description": "remove dead imports",
                     }
                 ],

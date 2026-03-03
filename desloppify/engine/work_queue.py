@@ -7,6 +7,12 @@ test suites.
 
 from __future__ import annotations
 
+# --- context: unified queue-resolution context -----------------------------
+from desloppify.engine._work_queue.context import (
+    QueueContext,
+    queue_context,
+)
+
 # --- core: queue building & options ----------------------------------------
 from desloppify.engine._work_queue.core import (
     ATTEST_EXAMPLE,
@@ -19,7 +25,6 @@ from desloppify.engine._work_queue.core import (
 # --- helpers: status/scope matching, item utilities ------------------------
 from desloppify.engine._work_queue.helpers import (
     ALL_STATUSES,
-    build_subjective_items,
     is_review_finding,
     is_subjective_finding,
     is_subjective_queue_item,
@@ -28,8 +33,13 @@ from desloppify.engine._work_queue.helpers import (
     scope_matches,
     slugify,
     status_matches,
-    subjective_strict_scores,
     supported_fixers_for_item,
+)
+
+# --- synthetic: dimension items, triage stages, workflow builders ----------
+from desloppify.engine._work_queue.synthetic import (
+    build_subjective_items,
+    subjective_strict_scores,
 )
 
 # --- issues: review-finding work queue -------------------------------------
@@ -49,6 +59,9 @@ from desloppify.engine._work_queue.ranking import (
 )
 
 __all__ = [
+    # context
+    "QueueContext",
+    "queue_context",
     # core
     "ATTEST_EXAMPLE",
     "QueueBuildOptions",
@@ -57,7 +70,6 @@ __all__ = [
     "group_queue_items",
     # helpers
     "ALL_STATUSES",
-    "build_subjective_items",
     "is_review_finding",
     "is_subjective_finding",
     "is_subjective_queue_item",
@@ -66,8 +78,10 @@ __all__ = [
     "scope_matches",
     "slugify",
     "status_matches",
-    "subjective_strict_scores",
     "supported_fixers_for_item",
+    # synthetic
+    "build_subjective_items",
+    "subjective_strict_scores",
     # ranking
     "build_finding_items",
     "item_explain",

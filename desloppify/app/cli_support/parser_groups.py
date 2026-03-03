@@ -28,7 +28,7 @@ __all__ = [
     "_add_dev_parser",
     "_add_exclude_parser",
     "_add_fix_parser",
-    "_add_ignore_parser",
+    "_add_suppress_parser",
     "_add_langs_parser",
     "_add_move_parser",
     "_add_next_parser",
@@ -261,12 +261,12 @@ examples:
     )
 
 
-def _add_ignore_parser(sub) -> None:
-    p_ignore = sub.add_parser(
-        "ignore", help="Add pattern to ignore list, remove matching findings"
+def _add_suppress_parser(sub) -> None:
+    p_suppress = sub.add_parser(
+        "suppress", help="Suppress findings matching a pattern"
     )
-    p_ignore.add_argument("pattern", help="File path, glob, or detector::prefix")
-    p_ignore.add_argument(
+    p_suppress.add_argument("pattern", help="File path, glob, or detector::prefix")
+    p_suppress.add_argument(
         "--attest",
         type=str,
         default=None,
@@ -276,7 +276,7 @@ def _add_ignore_parser(sub) -> None:
             '--attest "I have actually [DESCRIBE THE CONCRETE CHANGE YOU MADE] and I am not gaming the score by resolving without fixing."'
         ),
     )
-    p_ignore.add_argument("--state", type=str, default=None, help="Path to state file")
+    p_suppress.add_argument("--state", type=str, default=None, help="Path to state file")
 
 
 def _add_exclude_parser(sub) -> None:

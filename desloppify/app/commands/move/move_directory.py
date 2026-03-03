@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from desloppify import languages as lang_mod
@@ -21,6 +20,7 @@ from desloppify.app.commands.move.move_planning import (
 )
 from desloppify.app.commands.move.move_reporting import print_directory_move_plan
 from desloppify.core.discovery_api import rel
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
 
 
@@ -31,11 +31,7 @@ def run_directory_move(args, source_abs: str, resolve_path_fn) -> None:
     dry_run = getattr(args, "dry_run", False)
 
     if Path(dest_abs).exists():
-        print(
-            colorize(f"Destination already exists: {rel(dest_abs)}", "red"),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise CommandError(f"Destination already exists: {rel(dest_abs)}")
 
     lang_name = None
     if getattr(args, "lang", None):
@@ -50,28 +46,17 @@ def run_directory_move(args, source_abs: str, resolve_path_fn) -> None:
         if lang:
             lang_name = lang.name
     if not lang_name:
-        print(
-            colorize(
-                (
-                    "Cannot detect language from directory contents. Use --lang "
-                    f"(supported extensions: {supported_ext_hint()})."
-                ),
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Cannot detect language from directory contents. Use --lang "
+            f"(supported extensions: {supported_ext_hint()})."
         )
-        sys.exit(1)
 
     lang = lang_mod.get_lang(lang_name)
     move_mod = load_lang_move_module(lang_name)
 
     source_files = collect_source_files(source_path, list(lang.extensions))
     if not source_files:
-        print(
-            colorize(f"No {lang_name} files found in {rel(source_abs)}", "yellow"),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise CommandError(f"No {lang_name} files found in {rel(source_abs)}")
 
     scan_path = Path(resolve_path_fn(lang.default_src))
     graph = lang.build_dep_graph(scan_path)

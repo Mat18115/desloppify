@@ -205,10 +205,10 @@ def _generate_action(
     if subtype and meta.fixers:
         matched_fixer = _subtype_has_fixer(meta, subtype)
         if matched_fixer:
-            return f"desloppify fix {matched_fixer} --dry-run"
+            return f"desloppify autofix {matched_fixer} --dry-run"
     elif meta.action_type == "auto_fix" and meta.fixers and not meta.needs_judgment:
         # Pure auto-fix detector, no subtypes
-        return f"desloppify fix {meta.fixers[0]} --dry-run"
+        return f"desloppify autofix {meta.fixers[0]} --dry-run"
 
     if meta.tool == "move":
         return "desloppify move"

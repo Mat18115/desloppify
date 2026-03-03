@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_api import colorize
+
+_logger = logging.getLogger(__name__)
 from desloppify.engine.work_queue import is_subjective_queue_item
+
+if TYPE_CHECKING:
+    from desloppify.engine._work_queue.context import QueueContext
 
 
 # ---------------------------------------------------------------------------
@@ -26,30 +33,53 @@ class QueueBreakdown:
     focus_cluster_count: int = 0
     focus_cluster_total: int = 0
 
+    @property
+    def actionable(self) -> int:
+        """Items that represent real work — excludes workflow navigation steps.
+
+        Use this instead of ``queue_total`` when gating on "is there work left?"
+        (e.g. scan preflight, plan-start-score clearing).  Workflow items like
+        ``workflow::run-scan`` guide the user but are not work to complete.
+        """
+        return max(0, self.queue_total - self.workflow)
+
 
 def plan_aware_queue_breakdown(
     state: dict,
     plan: dict | None = None,
+    *,
+    context: "QueueContext | None" = None,
 ) -> QueueBreakdown:
-    """Build a full :class:`QueueBreakdown` from a single ``build_work_queue`` call."""
+    """Build a full :class:`QueueBreakdown` from a single ``build_work_queue`` call.
+
+    When *context* is provided, its ``plan`` and ``policy`` are forwarded to
+    ``build_work_queue`` so the counts agree with the caller's resolution.
+    """
+    from desloppify.engine._work_queue.plan_order import collapse_clusters
     from desloppify.engine.work_queue import QueueBuildOptions, build_work_queue
+
+    effective_plan = context.plan if context is not None else plan
 
     result = build_work_queue(
         state,
         options=QueueBuildOptions(
             status="open",
             count=None,
-            plan=plan,
-            collapse_clusters=True,
+            plan=effective_plan if context is None else None,
             include_skipped=False,
+            context=context,
         ),
     )
 
-    queue_total = result["total"]
+    # Collapse clusters for display-level counting
+    items = result.get("items", [])
+    if effective_plan and not effective_plan.get("active_cluster"):
+        items = collapse_clusters(items, effective_plan)
+
+    queue_total = len(items)
 
     # Count subjective and workflow items in the queue.
     # Collapsed clusters whose members are all subjective count as subjective.
-    items = result.get("items", [])
     subjective = sum(
         1 for item in items
         if is_subjective_queue_item(item)
@@ -62,22 +92,22 @@ def plan_aware_queue_breakdown(
     # Plan-derived counts
     plan_ordered = 0
     skipped = 0
-    if plan:
-        skipped = len(plan.get("skipped", {}))
+    if effective_plan:
+        skipped = len(effective_plan.get("skipped", {}))
         # plan_ordered = items that are in queue_order minus skipped
-        queue_order = plan.get("queue_order", [])
-        skipped_ids = set(plan.get("skipped", {}).keys())
+        queue_order = effective_plan.get("queue_order", [])
+        skipped_ids = set(effective_plan.get("skipped", {}).keys())
         plan_ordered = sum(1 for fid in queue_order if fid not in skipped_ids)
 
     # Focus cluster info
     focus_cluster = None
     focus_cluster_count = 0
     focus_cluster_total = 0
-    if plan:
-        active = plan.get("active_cluster")
+    if effective_plan:
+        active = effective_plan.get("active_cluster")
         if active:
             focus_cluster = active
-            cluster_data = plan.get("clusters", {}).get(active, {})
+            cluster_data = effective_plan.get("clusters", {}).get(active, {})
             focus_cluster_total = len(cluster_data.get("finding_ids", []))
             # Count how many cluster members are still in the queue
             cluster_member_ids = set(cluster_data.get("finding_ids", []))
@@ -103,6 +133,14 @@ def plan_aware_queue_breakdown(
 # ---------------------------------------------------------------------------
 # Formatting helpers — single source of truth for queue display
 # ---------------------------------------------------------------------------
+
+def format_plan_delta(live: float, frozen: float) -> str:
+    """Format plan-start vs live delta, or '' if below threshold."""
+    if abs(live - frozen) < 0.05:
+        return ""
+    delta = round(live - frozen, 1)
+    return f"{'+' if delta > 0 else ''}{delta:.1f}"
+
 
 def format_queue_headline(breakdown: QueueBreakdown) -> str:
     """The one-line Queue summary. Same format everywhere.
@@ -136,6 +174,7 @@ def format_queue_block(
     breakdown: QueueBreakdown,
     *,
     frozen_score: float | None = None,
+    live_score: float | None = None,
 ) -> list[tuple[str, str]]:
     """Full queue block: focus banner + queue line + contextual hints.
 
@@ -152,12 +191,19 @@ def format_queue_block(
         )
         lines.append((focus_line, "cyan"))
 
-    # Frozen score line
+    # Score line: show both frozen plan-start and live score when available
     if frozen_score is not None:
-        lines.append((
-            f"  Score (frozen at plan start): strict {frozen_score:.1f}/100",
-            "cyan",
-        ))
+        delta_str = format_plan_delta(live_score, frozen_score) if live_score is not None else ""
+        if delta_str:
+            lines.append((
+                f"  Score: strict {live_score:.1f}/100 (plan start: {frozen_score:.1f}, {delta_str})",
+                "cyan",
+            ))
+        else:
+            lines.append((
+                f"  Score (frozen at plan start): strict {frozen_score:.1f}/100",
+                "cyan",
+            ))
 
     # Queue headline — always the same
     lines.append((f"  {format_queue_headline(breakdown)}", "bold"))
@@ -189,20 +235,14 @@ def format_queue_block(
 # ---------------------------------------------------------------------------
 
 def plan_aware_queue_count(state: dict, plan: dict | None = None) -> int:
-    """Count remaining plan-aware queue items (skips excluded, clusters collapsed)."""
-    from desloppify.engine.work_queue import QueueBuildOptions, build_work_queue
+    """Count remaining plan-aware queue items (skips excluded, clusters collapsed).
 
-    result = build_work_queue(
-        state,
-        options=QueueBuildOptions(
-            status="open",
-            count=None,
-            plan=plan,
-            collapse_clusters=True,
-            include_skipped=False,
-        ),
-    )
-    return result["total"]
+    .. deprecated::
+        Returns ``queue_total`` which **includes** workflow navigation items.
+        Prefer ``plan_aware_queue_breakdown(state, plan).actionable`` for
+        gate/preflight checks where workflow items should not count.
+    """
+    return plan_aware_queue_breakdown(state, plan).queue_total
 
 
 def get_plan_start_strict(plan: dict | None) -> float | None:
@@ -217,6 +257,7 @@ def print_frozen_score_with_queue_context(
     queue_remaining: int,
     *,
     breakdown: QueueBreakdown | None = None,
+    live_score: float | None = None,
 ) -> None:
     """Show frozen plan-start score + queue progress.
 
@@ -229,7 +270,7 @@ def print_frozen_score_with_queue_context(
         return
 
     if breakdown is not None:
-        block = format_queue_block(breakdown, frozen_score=strict)
+        block = format_queue_block(breakdown, frozen_score=strict, live_score=live_score)
         print()
         for text, style in block:
             print(colorize(text, style))
@@ -302,7 +343,7 @@ def print_execution_or_reveal(
         try:
             breakdown = plan_aware_queue_breakdown(state, plan)
         except PLAN_LOAD_EXCEPTIONS:
-            pass
+            _logger.debug("queue breakdown computation skipped", exc_info=True)
 
     remaining = breakdown.queue_total if breakdown else 0
 
@@ -310,8 +351,11 @@ def print_execution_or_reveal(
     if remaining > 0 and frozen_strict is not None:
         objective_remaining = remaining - breakdown.subjective - breakdown.workflow
         if objective_remaining > 0:
+            # Compute live score for delta display alongside frozen
+            from desloppify import state as state_mod
             print_frozen_score_with_queue_context(
                 plan, remaining, breakdown=breakdown,
+                live_score=state_mod.get_strict_score(state),
             )
             return
 
@@ -342,6 +386,7 @@ def show_score_with_plan_context(state: dict, prev) -> None:
 
 __all__ = [
     "QueueBreakdown",
+    "format_plan_delta",
     "format_queue_block",
     "format_queue_headline",
     "get_plan_start_strict",

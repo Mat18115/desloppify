@@ -418,7 +418,7 @@ def test_print_llm_summary_respects_env_and_includes_dimension_table(
             SimpleNamespace(name="Code quality"),
         ],
     )
-    monkeypatch.setattr(registry_mod, "dimension_action_type", lambda _name: "fix")
+    monkeypatch.setattr(registry_mod, "dimension_action_type", lambda _name: "autofix")
 
     badge_path = Path(tmp_path / "badge.png")
     badge_path.write_bytes(b"x")

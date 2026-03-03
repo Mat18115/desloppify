@@ -165,21 +165,21 @@ class TestCreateParser:
         assert args.group == "file"
         assert args.format == "md"
 
-    def test_plan_done_command(self, parser):
-        args = parser.parse_args(["plan", "done", "id1", "id2"])
+    def test_plan_resolve_command(self, parser):
+        args = parser.parse_args(["plan", "resolve", "id1", "id2"])
         assert args.command == "plan"
-        assert args.plan_action == "done"
+        assert args.plan_action == "resolve"
         assert args.patterns == ["id1", "id2"]
 
-    def test_plan_done_with_note(self, parser):
-        args = parser.parse_args(["plan", "done", "id1", "--note", "removed import"])
+    def test_plan_resolve_with_note(self, parser):
+        args = parser.parse_args(["plan", "resolve", "id1", "--note", "removed import"])
         assert args.note == "removed import"
 
-    def test_plan_done_with_attest(self, parser):
+    def test_plan_resolve_with_attest(self, parser):
         args = parser.parse_args(
             [
                 "plan",
-                "done",
+                "resolve",
                 "id1",
                 "--attest",
                 "I have actually fixed this and I am not gaming",
@@ -194,15 +194,15 @@ class TestCreateParser:
         with pytest.raises(SystemExit):
             parser.parse_args(["resolve", "fixed", "id1"])
 
-    def test_ignore_command(self, parser):
-        args = parser.parse_args(["ignore", "smells::*::async_no_await"])
-        assert args.command == "ignore"
+    def test_suppress_command(self, parser):
+        args = parser.parse_args(["suppress", "smells::*::async_no_await"])
+        assert args.command == "suppress"
         assert args.pattern == "smells::*::async_no_await"
 
-    def test_ignore_with_attest(self, parser):
+    def test_suppress_with_attest(self, parser):
         args = parser.parse_args(
             [
-                "ignore",
+                "suppress",
                 "smells::*::async_no_await",
                 "--attest",
                 "I have actually reviewed this and I am not gaming",
@@ -210,9 +210,9 @@ class TestCreateParser:
         )
         assert args.attest is not None
 
-    def test_fix_command(self, parser):
-        args = parser.parse_args(["fix", "unused_imports", "--dry-run"])
-        assert args.command == "fix"
+    def test_autofix_command(self, parser):
+        args = parser.parse_args(["autofix", "unused_imports", "--dry-run"])
+        assert args.command == "autofix"
         assert args.fixer == "unused_imports"
         assert args.dry_run is True
 

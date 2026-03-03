@@ -15,46 +15,26 @@ from desloppify.app.commands.helpers.query import write_query
 from . import runner_helpers as runner_helpers_mod
 from .runtime import setup_lang_concrete
 from desloppify.core.coercions_api import coerce_positive_int
-from desloppify.core.text_api import get_project_root
 from desloppify.core.discovery_api import safe_write_text
 from desloppify.intelligence import narrative as narrative_mod
 from desloppify.intelligence import review as review_mod
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
 
 from .helpers import parse_dimensions
 from .import_cmd import do_import, do_validate_import
 from .batch import FOLLOWUP_SCAN_TIMEOUT_SECONDS
-
-# Backward-compatible override hooks for tests.
-PROJECT_ROOT: Path | None = None
-REVIEW_PACKET_DIR: Path | None = None
-EXTERNAL_SESSION_ROOT: Path | None = None
+from .runtime_paths import (
+    blind_packet_path as _blind_packet_path,
+    external_session_root as _external_session_root,
+    review_packet_dir as _review_packet_dir,
+    runtime_project_root as _runtime_project_root,
+)
 EXTERNAL_ATTEST_TEXT = (
     "I validated this review was completed without awareness of overall score and is unbiased."
 )
 _EXTERNAL_SUPPORTED_RUNNERS = {"claude"}
 
-
-def _runtime_project_root() -> Path:
-    if isinstance(PROJECT_ROOT, Path):
-        return PROJECT_ROOT
-    return get_project_root()
-
-
-def _review_packet_dir() -> Path:
-    if isinstance(REVIEW_PACKET_DIR, Path):
-        return REVIEW_PACKET_DIR
-    return _runtime_project_root() / ".desloppify" / "review_packets"
-
-
-def _external_session_root() -> Path:
-    if isinstance(EXTERNAL_SESSION_ROOT, Path):
-        return EXTERNAL_SESSION_ROOT
-    return _runtime_project_root() / ".desloppify" / "external_review_sessions"
-
-
-def _blind_packet_path() -> Path:
-    return _runtime_project_root() / ".desloppify" / "review_packet_blind.json"
 
 
 def _utc_now() -> datetime:
@@ -89,48 +69,35 @@ def _session_file(session_id: str) -> Path:
     return _session_dir(session_id) / "session.json"
 
 
-def _validate_session_id_or_exit(session_id: str) -> None:
+def _validate_session_id(session_id: str) -> None:
     if not session_id.strip():
-        print(colorize("  Error: --session-id is required.", "red"), file=sys.stderr)
-        sys.exit(2)
+        raise CommandError("Error: --session-id is required.", exit_code=2)
     invalid_chars = {"/", "\\", ".."}
     if any(part in session_id for part in invalid_chars):
-        print(colorize("  Error: invalid --session-id value.", "red"), file=sys.stderr)
-        sys.exit(2)
+        raise CommandError("Error: invalid --session-id value.", exit_code=2)
 
 
 def _load_json_object(path: Path, *, label: str) -> dict[str, Any]:
     if not path.exists():
-        print(colorize(f"  Error: {label} not found: {path}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"Error: {label} not found: {path}")
     try:
         payload = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        print(colorize(f"  Error: failed reading {label}: {exc}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"Error: failed reading {label}: {exc}")
     if not isinstance(payload, dict):
-        print(
-            colorize(f"  Error: {label} must contain a JSON object.", "red"),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise CommandError(f"Error: {label} must contain a JSON object.")
     return payload
 
 
-def _session_payload_or_exit(session_id: str) -> tuple[Path, dict[str, Any]]:
-    _validate_session_id_or_exit(session_id)
+def _session_payload(session_id: str) -> tuple[Path, dict[str, Any]]:
+    _validate_session_id(session_id)
     path = _session_file(session_id)
     payload = _load_json_object(path, label="session")
     payload_id = str(payload.get("session_id", "")).strip()
     if payload_id != session_id:
-        print(
-            colorize(
-                f"  Error: session id mismatch in {path} (expected {session_id}, found {payload_id or '<missing>'}).",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            f"Error: session id mismatch in {path} (expected {session_id}, found {payload_id or '<missing>'}).",
         )
-        sys.exit(1)
     return path, payload
 
 
@@ -247,18 +214,13 @@ def do_external_start(args, state, lang, *, config: dict[str, Any] | None = None
     config = config or {}
     runner = str(getattr(args, "external_runner", "claude")).strip().lower()
     if runner not in _EXTERNAL_SUPPORTED_RUNNERS:
-        print(
-            colorize(
-                f"  Error: unsupported external runner '{runner}'. Supported: claude.",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            f"Error: unsupported external runner '{runner}'. Supported: claude.",
+            exit_code=2,
         )
-        sys.exit(2)
     ttl_hours = int(getattr(args, "session_ttl_hours", 24) or 0)
     if ttl_hours <= 0:
-        print(colorize("  Error: --session-ttl-hours must be > 0.", "red"), file=sys.stderr)
-        sys.exit(2)
+        raise CommandError("Error: --session-ttl-hours must be > 0.", exit_code=2)
 
     packet, packet_path, blind_path = _prepare_packet_snapshot(
         args,
@@ -268,11 +230,7 @@ def do_external_start(args, state, lang, *, config: dict[str, Any] | None = None
     )
     packet_hash = runner_helpers_mod.sha256_file(blind_path)
     if not isinstance(packet_hash, str):
-        print(
-            colorize(f"  Error: failed to hash blind packet: {blind_path}", "red"),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise CommandError(f"Error: failed to hash blind packet: {blind_path}")
 
     now = _utc_now()
     expires = now + timedelta(hours=ttl_hours)
@@ -380,39 +338,20 @@ def _canonical_external_payload(
     """Return import payload with canonical provenance and required session token."""
     session_meta = raw_payload.get("session")
     if not isinstance(session_meta, dict):
-        print(
-            colorize(
-                "  Error: external reviewer payload must include top-level `session` object.",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Error: external reviewer payload must include top-level `session` object."
+            ' Expected: {"session":{"id":"...","token":"..."},"assessments":{...},"findings":[...]}',
         )
-        print(
-            colorize(
-                "  Expected: {\"session\":{\"id\":\"...\",\"token\":\"...\"},\"assessments\":{...},\"findings\":[...]}",
-                "dim",
-            ),
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
     payload_id = str(session_meta.get("id", "")).strip()
     payload_token = str(session_meta.get("token", "")).strip()
     expected_id = str(session.get("session_id", "")).strip()
     expected_token = str(session.get("token", "")).strip()
     if payload_id != expected_id or payload_token != expected_token:
-        print(
-            colorize(
-                "  Error: session id/token mismatch in external reviewer payload.",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Error: session id/token mismatch in external reviewer payload."
+            " Regenerate output using the session template/instructions.",
         )
-        print(
-            colorize("  Regenerate output using the session template/instructions.", "yellow"),
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
     payload = dict(raw_payload)
     payload.pop("session", None)
@@ -421,51 +360,35 @@ def _canonical_external_payload(
         "kind": "blind_review_batch_import",
         "blind": True,
         "runner": str(session.get("runner", "claude")),
-        "run_stamp": str(session.get("session_id", "")),
+        "session_id": str(session.get("session_id", "")),
         "created_at": _iso_seconds(_utc_now()),
         "packet_path": str(session.get("blind_packet_path", "")),
         "packet_sha256": str(session.get("packet_sha256", "")),
-        "external_session_id": expected_id,
     }
     return payload
 
 
-def _ensure_session_open_or_exit(session: dict[str, Any]) -> None:
+def _ensure_session_open(session: dict[str, Any]) -> None:
     status = str(session.get("status", "open")).strip().lower()
     if status == "open":
         return
-    print(
-        colorize(
-            f"  Error: session is not open (status={status or 'unknown'}). Start a new session with --external-start.",
-            "red",
-        ),
-        file=sys.stderr,
+    raise CommandError(
+        f"Error: session is not open (status={status or 'unknown'}). Start a new session with --external-start.",
     )
-    sys.exit(1)
 
 
-def _ensure_session_not_expired_or_exit(session: dict[str, Any]) -> None:
+def _ensure_session_not_expired(session: dict[str, Any]) -> None:
     expires_at = _parse_iso(session.get("expires_at"))
     if expires_at is None:
-        print(
-            colorize(
-                "  Error: session metadata is missing/invalid expires_at.",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Error: session metadata is missing/invalid expires_at.",
         )
-        sys.exit(1)
     now = _utc_now()
     if now <= expires_at:
         return
-    print(
-        colorize(
-            f"  Error: session expired at {session.get('expires_at')}. Start a new session with --external-start.",
-            "red",
-        ),
-        file=sys.stderr,
+    raise CommandError(
+        f"Error: session expired at {session.get('expires_at')}. Start a new session with --external-start.",
     )
-    sys.exit(1)
 
 
 def do_external_submit(
@@ -483,19 +406,14 @@ def do_external_submit(
 ) -> None:
     """Submit external reviewer output via session, adding canonical provenance."""
     config = config or {}
-    session_path, session = _session_payload_or_exit(session_id)
-    _ensure_session_open_or_exit(session)
-    _ensure_session_not_expired_or_exit(session)
+    session_path, session = _session_payload(session_id)
+    _ensure_session_open(session)
+    _ensure_session_not_expired(session)
 
     if str(session.get("runner", "")).strip().lower() not in _EXTERNAL_SUPPORTED_RUNNERS:
-        print(
-            colorize(
-                "  Error: only Claude external sessions currently support durable score submit.",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Error: only Claude external sessions currently support durable score submit.",
         )
-        sys.exit(1)
 
     findings_path = Path(import_file)
     raw_payload = _load_json_object(findings_path, label="external findings")

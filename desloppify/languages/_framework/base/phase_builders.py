@@ -13,25 +13,56 @@ from .shared_phases import (
 from .types import DetectorPhase
 
 
-def _phase_factory(label: str, run_fn, *, slow: bool = False):
-    """Return a phase factory with explicit label/run/slow semantics."""
+def _phase_factory(
+    label: str,
+    run_fn,
+    *,
+    slow: bool = False,
+    exclusive_detector: str | None = None,
+):
+    """Return a phase factory with explicit label/run/slow semantics.
+
+    *exclusive_detector*: if set, the detector module path that this phase owns.
+    Language-specific phase files must not import that module directly.
+    """
     def factory() -> DetectorPhase:
         return DetectorPhase(label, run_fn, slow=slow)
+    factory.exclusive_detector = exclusive_detector
     return factory
 
 
 SHARED_PHASE_FACTORIES = {
-    "test_coverage": _phase_factory("Test coverage", phase_test_coverage),
-    "security": _phase_factory("Security", phase_security),
-    "signature": _phase_factory("Signature analysis", phase_signature),
-    "subjective_review": _phase_factory("Subjective review", phase_subjective_review),
-    "duplicates": _phase_factory("Duplicates", phase_dupes, slow=True),
+    "test_coverage": _phase_factory(
+        "Test coverage", phase_test_coverage,
+        exclusive_detector="desloppify.engine.detectors.test_coverage",
+    ),
+    "security": _phase_factory(
+        "Security", phase_security,
+        exclusive_detector="desloppify.engine.detectors.security",
+    ),
+    "signature": _phase_factory(
+        "Signature analysis", phase_signature,
+        exclusive_detector="desloppify.engine.detectors.signature",
+    ),
+    "subjective_review": _phase_factory(
+        "Subjective review", phase_subjective_review,
+        exclusive_detector="desloppify.engine.detectors.review_coverage",
+    ),
+    "duplicates": _phase_factory(
+        "Duplicates", phase_dupes, slow=True,
+        exclusive_detector="desloppify.engine.detectors.dupes",
+    ),
     "boilerplate_duplication": _phase_factory(
-        "Boilerplate duplication",
-        phase_boilerplate_duplication,
-        slow=True,
+        "Boilerplate duplication", phase_boilerplate_duplication, slow=True,
+        exclusive_detector="desloppify.engine.detectors.jscpd_adapter",
     ),
 }
+
+EXCLUSIVE_DETECTOR_MODULES: frozenset[str] = frozenset(
+    f.exclusive_detector
+    for f in SHARED_PHASE_FACTORIES.values()
+    if f.exclusive_detector is not None
+)
 
 
 detector_phase_test_coverage = SHARED_PHASE_FACTORIES["test_coverage"]
@@ -62,6 +93,7 @@ __all__ = [
     "detector_phase_signature",
     "detector_phase_subjective_review",
     "detector_phase_test_coverage",
+    "EXCLUSIVE_DETECTOR_MODULES",
     "SHARED_PHASE_FACTORIES",
     "shared_subjective_duplicates_tail",
 ]

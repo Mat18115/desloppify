@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from desloppify import state as state_mod
-from desloppify.engine.detectors import signature as signature_detector_mod
 from desloppify.engine.policy.zones import adjust_potential, filter_entries
 from desloppify.languages._framework.finding_factories import make_smell_findings
 from desloppify.languages._framework.runtime import LangRun
@@ -30,33 +29,6 @@ def phase_smells(path: Path, lang: LangRun) -> tuple[list[Finding], dict[str, in
     if ruff_entries:
         entries = entries + ruff_entries
     results = make_smell_findings(entries, log)
-
-    functions = lang.extract_functions(path) if lang.extract_functions else []
-    sig_entries, _ = signature_detector_mod.detect_signature_variance(functions)
-    for entry in sig_entries:
-        results.append(
-            state_mod.make_finding(
-                "smells",
-                entry["files"][0],
-                f"sig_variance::{entry['name']}",
-                tier=3,
-                confidence="medium",
-                summary=(
-                    f"Signature variance: {entry['name']}() has {entry['signature_count']} "
-                    f"different signatures across {entry['file_count']} files"
-                ),
-                detail={
-                    "function": entry["name"],
-                    "file_count": entry["file_count"],
-                    "signature_count": entry["signature_count"],
-                    "variants": entry["variants"][:5],
-                },
-            )
-        )
-    if sig_entries:
-        log(
-            f"         signature variance: {len(sig_entries)} functions with inconsistent signatures"
-        )
 
     return results, {
         "smells": adjust_potential(lang.zone_map, total_files),

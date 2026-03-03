@@ -6,6 +6,7 @@ import logging
 import sys
 from pathlib import Path
 
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.fallbacks import log_best_effort_failure
 
 logger = logging.getLogger(__name__)
@@ -306,14 +307,14 @@ def print_failures(
     )
 
 
-def print_failures_and_exit(
+def print_failures_and_raise(
     *,
     failures: list[int],
     packet_path: Path,
     logs_dir: Path,
     colorize_fn,
 ) -> None:
-    """Render retry guidance for failed batches and exit non-zero."""
+    """Render retry guidance for failed batches and raise CommandError."""
     if not failures:
         print(colorize_fn("  Failed batches: []", "yellow"), file=sys.stderr)
     _print_failures_report(
@@ -322,7 +323,8 @@ def print_failures_and_exit(
         logs_dir=logs_dir,
         colorize_fn=colorize_fn,
     )
-    sys.exit(1)
+    failed_1 = sorted({idx + 1 for idx in failures})
+    raise CommandError(f"batch execution failed: {failed_1}", exit_code=1)
 
 
 __all__ = [
@@ -332,7 +334,7 @@ __all__ = [
     "has_codex_backend_connectivity_issue",
     "looks_like_restricted_sandbox",
     "print_failures",
-    "print_failures_and_exit",
+    "print_failures_and_raise",
     "runner_failure_hints",
     "summarize_failure_categories",
 ]

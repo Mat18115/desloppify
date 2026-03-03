@@ -17,11 +17,11 @@ def build_workflow_guide(attest_example: str) -> str:
         1. **Follow `next`**: `desloppify next` — the single source of truth for what to work on.
            It respects the plan, surfaces auto-clustered batches, and tells you exactly what to do.
         2. **Fix & resolve**: Fix the issue, then:
-           `desloppify plan done "<id>" --note "<what you did>" --confirm`
+           `desloppify plan resolve "<id>" --note "<what you did>" --confirm`
            Or with explicit attestation: `--attest "{attest_example}"`
         3. **Plan strategically**: `desloppify plan` — reorder, cluster related issues, defer low-value work.
            Think about sequencing: what unblocks the most? What cascades? What can be batched?
-        4. **Run auto-fixers** (if available): `desloppify fix <fixer> --dry-run` to preview, then apply.
+        4. **Run auto-fixers** (if available): `desloppify autofix <fixer> --dry-run` to preview, then apply.
         5. **Rescan**: `desloppify scan --path <path>` — verify improvements, catch cascading effects.
         6. **Subjective review**: `desloppify review --run-batches --runner codex --parallel --scan-after-import`
            (or `review --prepare` → review → import for manual path).

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from desloppify.app.commands.fix.options import _COMMAND_POST_FIX, _load_fixer
+from desloppify.core.exception_sets import CommandError
 from desloppify.languages._framework.base.types import FixerConfig, LangConfig
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -104,9 +105,9 @@ def test_load_fixer_exits_when_no_lang():
     """When resolve_lang returns None, sys.exit(1) is called."""
     args = _FakeArgs()
     with patch("desloppify.app.commands.fix.options.resolve_lang", return_value=None):
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             _load_fixer(args, "unused")
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
 
 def test_load_fixer_exits_when_no_fixers():
@@ -114,9 +115,9 @@ def test_load_fixer_exits_when_no_fixers():
     lang = _make_lang(fixers={})
     args = _FakeArgs()
     with patch("desloppify.app.commands.fix.options.resolve_lang", return_value=lang):
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             _load_fixer(args, "unused")
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
 
 def test_load_fixer_exits_when_fixer_name_unknown():
@@ -125,7 +126,7 @@ def test_load_fixer_exits_when_fixer_name_unknown():
     lang = _make_lang(fixers={"unused": fc})
     args = _FakeArgs()
     with patch("desloppify.app.commands.fix.options.resolve_lang", return_value=lang):
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             _load_fixer(args, "nonexistent")
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 

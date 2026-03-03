@@ -69,7 +69,7 @@ import desloppify.languages.python.extractors_classes as py_extractors_classes
 import desloppify.languages.python.extractors_shared as py_extractors_shared
 import desloppify.languages.python.phases as py_phases
 import desloppify.languages.python.phases_quality as py_phases_quality
-import desloppify.languages.typescript.detectors._smell_effects as ts_smell_effects
+import desloppify.languages.typescript.detectors._smell_detectors as ts_smell_detectors
 import desloppify.languages.typescript.detectors.deps_runtime as ts_deps_runtime
 import desloppify.languages.typescript.extractors_components as ts_extractors_components
 from desloppify.intelligence.review import prepare_batches as review_prepare_batches
@@ -175,7 +175,7 @@ def test_smoke_engine():
         py_extractors_shared.extract_py_params,
         py_phases_quality.phase_smells,
         py_phases_quality.phase_dict_keys,
-        ts_smell_effects.detect_swallowed_errors,
+        ts_smell_detectors._detect_swallowed_errors,
         ts_deps_runtime.build_dynamic_import_targets,
         ts_extractors_components.extract_ts_components,
     )
@@ -368,7 +368,7 @@ def test_serialize_cluster_item_caps_member_payload():
             "file": f"src/f{i}.py",
             "summary": "Security finding",
             "status": "open",
-            "primary_command": "desloppify plan done ...",
+            "primary_command": "desloppify plan resolve ...",
             "plan_cluster": {
                 "name": "auto/security",
                 "sibling_ids": sibling_ids,

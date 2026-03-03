@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 from desloppify import state as state_mod
@@ -11,7 +12,10 @@ from desloppify.app.commands.helpers.queue_progress import show_score_with_plan_
 from desloppify.app.commands.helpers.state import state_path
 from desloppify.app.commands.helpers.guardrails import require_triage_current_or_exit
 from desloppify.core import config as config_mod  # noqa: F401 (compat export)
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_api import colorize
+
+_logger = logging.getLogger(__name__)
 from desloppify.engine.plan import (
     add_uncommitted_findings,
     append_log_entry,
@@ -25,7 +29,7 @@ from desloppify.intelligence import narrative as narrative_mod
 from desloppify.state import coerce_assessment_score
 
 from .apply import _resolve_all_patterns, _write_resolve_query_entry
-from .ignore_cmd import cmd_ignore_pattern
+from .suppress_cmd import cmd_suppress_pattern
 from .persist import _save_state_or_exit
 from .queue_guard import _check_queue_order_guard
 from .render import (
@@ -113,7 +117,8 @@ def cmd_resolve(args: argparse.Namespace) -> None:
                 print(colorize(f"  Plan updated: {purged} item(s) removed from queue.", "dim"))
             else:
                 save_plan(plan)
-    except (OSError, ValueError, KeyError, TypeError):
+    except PLAN_LOAD_EXCEPTIONS as exc:
+        _logger.debug("plan update failed after resolve", exc_info=True)
         print(colorize("  Warning: could not update living plan.", "yellow"), file=sys.stderr)
 
     _print_resolve_summary(status=args.status, all_resolved=all_resolved)
@@ -158,4 +163,4 @@ def cmd_resolve(args: argparse.Namespace) -> None:
     )
 
 
-__all__ = ["_check_queue_order_guard", "cmd_ignore_pattern", "cmd_resolve"]
+__all__ = ["_check_queue_order_guard", "cmd_suppress_pattern", "cmd_resolve"]

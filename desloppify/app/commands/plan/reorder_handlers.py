@@ -1,4 +1,4 @@
-"""Plan move subcommand handlers."""
+"""Plan reorder subcommand handlers."""
 
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ def resolve_target(plan: dict, target: str | None, position: str) -> str | None:
     return ordered[0] if position == "before" else ordered[-1]
 
 
-def cmd_plan_move(args: argparse.Namespace) -> None:
-    """Move findings to a position in the queue."""
+def cmd_plan_reorder(args: argparse.Namespace) -> None:
+    """Reorder findings in the queue."""
     state = command_runtime(args).state
     if not require_completed_scan(state):
         return
@@ -40,10 +40,10 @@ def cmd_plan_move(args: argparse.Namespace) -> None:
     target: str | None = getattr(args, "target", None)
 
     if position in ("before", "after") and target is None:
-        print(colorize(f"  '{position}' requires --target (-t). Example: plan move <pat> {position} -t <id>", "red"))
+        print(colorize(f"  '{position}' requires --target (-t). Example: plan reorder <pat> {position} -t <id>", "red"))
         return
     if position in ("up", "down") and target is None:
-        print(colorize(f"  '{position}' requires --target (-t) with an integer offset. Example: plan move <pat> {position} -t 3", "red"))
+        print(colorize(f"  '{position}' requires --target (-t) with an integer offset. Example: plan reorder <pat> {position} -t 3", "red"))
         return
 
     plan = load_plan()
@@ -66,11 +66,11 @@ def cmd_plan_move(args: argparse.Namespace) -> None:
 
     count = move_items(plan, finding_ids, position, target=target, offset=offset)
     append_log_entry(
-        plan, "move", finding_ids=finding_ids, actor="user",
+        plan, "reorder", finding_ids=finding_ids, actor="user",
         detail={"position": position, "target": target, "offset": offset},
     )
     save_plan(plan)
     print(colorize(f"  Moved {count} item(s) to {position}.", "green"))
 
 
-__all__ = ["cmd_plan_move", "resolve_target"]
+__all__ = ["cmd_plan_reorder", "resolve_target"]

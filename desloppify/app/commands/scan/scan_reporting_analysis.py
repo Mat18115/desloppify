@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from desloppify import state as state_mod
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.engine.plan import has_living_plan, load_plan
 from desloppify.intelligence import narrative as narrative_mod
 from desloppify.core.output_api import colorize
@@ -90,7 +91,10 @@ def show_post_scan_analysis(
 
     # Load plan for narrative cluster awareness
     _plan_data = None
-    _plan = load_plan()
+    try:
+        _plan = load_plan()
+    except PLAN_LOAD_EXCEPTIONS:
+        _plan = {}
     if _plan.get("queue_order") or _plan.get("clusters"):
         _plan_data = _plan
 

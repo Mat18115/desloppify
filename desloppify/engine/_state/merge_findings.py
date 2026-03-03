@@ -46,6 +46,22 @@ def find_suspect_detectors(
     return suspect
 
 
+def _mark_auto_resolved(finding: dict, now: str, *, note: str, attestation_text: str) -> None:
+    """Stamp a finding as auto-resolved with the given note and attestation."""
+    finding["status"] = "auto_resolved"
+    finding["resolved_at"] = now
+    finding["suppressed"] = False
+    finding["suppressed_at"] = None
+    finding["suppression_pattern"] = None
+    finding["resolution_attestation"] = {
+        "kind": "scan_verified",
+        "text": attestation_text,
+        "attested_at": now,
+        "scan_verified": True,
+    }
+    finding["note"] = note
+
+
 def auto_resolve_disappeared(
     existing: dict,
     current_ids: set[str],
@@ -58,9 +74,11 @@ def auto_resolve_disappeared(
 ) -> tuple[int, int, int, set[str]]:
     """Auto-resolve open/wontfix/fixed/false_positive findings absent from scan.
 
-    Returns (resolved, skipped_other_lang, skipped_out_of_scope, resolved_detectors).
+    Returns (resolved, skipped_other_lang, resolved_out_of_scope, resolved_detectors).
+    Out-of-scope findings are auto-resolved (not skipped) so they stop polluting
+    queue counts.  Re-scanning with a wider scan_path will reopen them via upsert.
     """
-    resolved = skipped_other_lang = skipped_out_of_scope = 0
+    resolved = skipped_other_lang = resolved_out_of_scope = 0
     resolved_detectors: set[str] = set()
 
     for finding_id, previous in existing.items():
@@ -82,7 +100,12 @@ def auto_resolve_disappeared(
                 not previous["file"].startswith(prefix)
                 and previous["file"] != scan_path
             ):
-                skipped_out_of_scope += 1
+                scope_note = f"Out of current scan scope (scan_path: {scan_path})"
+                _mark_auto_resolved(
+                    previous, now, note=scope_note, attestation_text=scope_note,
+                )
+                resolved_detectors.add(previous.get("detector", "unknown"))
+                resolved_out_of_scope += 1
                 continue
 
         if exclude and any(matches_exclusion(previous["file"], ex) for ex in exclude):
@@ -92,26 +115,20 @@ def auto_resolve_disappeared(
             continue
 
         previous_status = previous["status"]
-        previous["status"] = "auto_resolved"
-        previous["resolved_at"] = now
-        previous["suppressed"] = False
-        previous["suppressed_at"] = None
-        previous["suppression_pattern"] = None
-        previous["resolution_attestation"] = {
-            "kind": "scan_verified",
-            "text": "Disappeared from detector output",
-            "attested_at": now,
-            "scan_verified": True,
-        }
-        previous["note"] = (
-            "Fixed despite wontfix — disappeared from scan (was wontfix)"
-            if previous_status == "wontfix"
-            else "Disappeared from scan — likely fixed"
+        _mark_auto_resolved(
+            previous,
+            now,
+            note=(
+                "Fixed despite wontfix — disappeared from scan (was wontfix)"
+                if previous_status == "wontfix"
+                else "Disappeared from scan — likely fixed"
+            ),
+            attestation_text="Disappeared from detector output",
         )
         resolved_detectors.add(previous.get("detector", "unknown"))
         resolved += 1
 
-    return resolved, skipped_other_lang, skipped_out_of_scope, resolved_detectors
+    return resolved, skipped_other_lang, resolved_out_of_scope, resolved_detectors
 
 
 def upsert_findings(

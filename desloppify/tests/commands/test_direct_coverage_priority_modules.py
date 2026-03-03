@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import desloppify.app.commands.helpers.display as display_mod
 import desloppify.app.commands.next_parts.render_support as next_render_support_mod
-import desloppify.app.commands.resolve.ignore_cmd as resolve_ignore_cmd_mod
+import desloppify.app.commands.resolve.suppress_cmd as resolve_suppress_cmd_mod
 import desloppify.app.commands.resolve.persist as resolve_persist_mod
 import desloppify.app.commands.resolve.queue_guard as resolve_queue_guard_mod
 import desloppify.app.commands.resolve.render_support as resolve_render_support_mod
@@ -61,7 +61,7 @@ def test_direct_coverage_priority_modules_smoke():
     assert callable(scan_agent_context_mod.print_llm_summary)
     assert callable(scan_integrity_report_mod.show_score_integrity)
     assert callable(next_render_support_mod.render_queue_header)
-    assert callable(resolve_ignore_cmd_mod.cmd_ignore_pattern)
+    assert callable(resolve_suppress_cmd_mod.cmd_suppress_pattern)
     assert callable(resolve_persist_mod._save_state_or_exit)
     assert callable(resolve_queue_guard_mod._check_queue_order_guard)
     assert callable(resolve_render_support_mod.print_post_resolve_guidance)

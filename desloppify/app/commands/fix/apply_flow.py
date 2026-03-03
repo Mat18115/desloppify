@@ -95,7 +95,7 @@ def _apply_and_report(
     fix_lang_name = fix_lang.name if fix_lang else None
     narrative = narrative_mod.compute_narrative(
         state,
-        context=narrative_mod.NarrativeContext(lang=fix_lang_name, command="fix"),
+        context=narrative_mod.NarrativeContext(lang=fix_lang_name, command="autofix"),
     )
     typecheck_cmd = getattr(lang, "typecheck_cmd", "")
     if typecheck_cmd:
@@ -106,7 +106,7 @@ def _apply_and_report(
         next_action = "Run `desloppify scan` to update state"
     write_query(
         {
-            "command": "fix",
+            "command": "autofix",
             "fixer": fixer_name,
             "files_fixed": len(results),
             "items_fixed": total_items,
@@ -140,11 +140,11 @@ def _report_dry_run(
     state = runtime.state
     narrative = narrative_mod.compute_narrative(
         state,
-        context=narrative_mod.NarrativeContext(lang=fix_lang_name, command="fix"),
+        context=narrative_mod.NarrativeContext(lang=fix_lang_name, command="autofix"),
     )
     write_query(
         {
-            "command": "fix",
+            "command": "autofix",
             "fixer": fixer_name,
             "dry_run": True,
             "files_would_fix": len(results),
@@ -180,7 +180,7 @@ def _resolve_fixer_results(
             if fid in state["findings"] and state["findings"][fid]["status"] == "open":
                 state["findings"][fid]["status"] = "fixed"
                 state["findings"][fid]["note"] = (
-                    f"auto-fixed by desloppify fix {fixer_name}"
+                    f"auto-fixed by desloppify autofix {fixer_name}"
                 )
                 resolved_ids.append(fid)
     return resolved_ids

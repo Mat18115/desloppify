@@ -336,7 +336,8 @@ def test_holistic_subjective_review_finding_points_to_holistic_refresh():
 def test_queue_build_options_defaults():
     opts = QueueBuildOptions()
     assert opts.count == 1
-    assert opts.scan_path is None
+    from desloppify.engine._work_queue.core import _SCAN_PATH_FROM_STATE
+    assert opts.scan_path is _SCAN_PATH_FROM_STATE
     assert opts.scope is None
     assert opts.status == "open"
     assert opts.include_subjective is True
@@ -852,7 +853,7 @@ def test_collapse_clusters_preserves_order():
         "cluster_key": "auto::unused",
         "finding_ids": ["u1", "u2"],
         "description": "Remove 2 unused findings",
-        "action": "desloppify fix unused-imports --dry-run",
+        "action": "desloppify autofix unused-imports --dry-run",
         "user_modified": False,
     }
 
@@ -940,3 +941,54 @@ def test_plan_ordered_stale_subjective_surfaces_with_objective_backlog():
 
     # And it should be first in the queue (plan order respected)
     assert queue_with_plan["items"][0]["id"] == "subjective::naming_quality"
+
+
+# ── Wontfix / resolved findings excluded (#193) ──────────
+
+
+def test_wontfixed_findings_excluded_from_queue():
+    """Findings with status 'wontfix' never appear in the default queue.
+
+    Regression test for #193: wontfixed findings were leaking into the
+    auto-generated queue because filtering was spread across multiple
+    modules and easy to miss.
+    """
+    state = _state(
+        [
+            _finding("a", status="open"),
+            _finding("b", status="wontfix"),
+            _finding("c", status="fixed"),
+            _finding("d", status="open"),
+        ]
+    )
+
+    queue = build_work_queue(state, count=None, include_subjective=False)
+    ids = {item["id"] for item in queue["items"]}
+    assert "a" in ids
+    assert "d" in ids
+    assert "b" not in ids  # wontfix excluded
+    assert "c" not in ids  # fixed excluded
+
+
+def test_wontfixed_findings_excluded_with_plan():
+    """Wontfixed findings stay out even when a plan is active."""
+    from desloppify.engine._plan.schema import empty_plan
+
+    plan = empty_plan()
+    plan["queue_order"] = ["a", "b", "c", "d"]
+
+    state = _state(
+        [
+            _finding("a", status="open"),
+            _finding("b", status="wontfix"),
+            _finding("c", status="fixed"),
+            _finding("d", status="open"),
+        ]
+    )
+
+    queue = build_work_queue(state, count=None, include_subjective=False, plan=plan)
+    ids = {item["id"] for item in queue["items"]}
+    assert "a" in ids
+    assert "d" in ids
+    assert "b" not in ids
+    assert "c" not in ids

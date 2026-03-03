@@ -1,9 +1,8 @@
-"""Ignore-pattern command handler extracted from resolve cmd module."""
+"""Suppress-pattern command handler extracted from resolve cmd module."""
 
 from __future__ import annotations
 
 import argparse
-import sys
 
 from desloppify import state as state_mod
 from desloppify.app.commands.helpers.lang import resolve_lang
@@ -11,6 +10,7 @@ from desloppify.app.commands.helpers.query import write_query
 from desloppify.app.commands.helpers.runtime import command_runtime
 from desloppify.app.commands.helpers.queue_progress import show_score_with_plan_context
 from desloppify.core import config as config_mod
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
 from desloppify.core.tooling import check_config_staleness
 from desloppify.engine.work_queue import ATTEST_EXAMPLE
@@ -20,12 +20,12 @@ from .persist import _save_config_or_exit, _save_state_or_exit
 from .selection import show_attestation_requirement, validate_attestation
 
 
-def cmd_ignore_pattern(args: argparse.Namespace) -> None:
-    """Add a pattern to the ignore list."""
+def cmd_suppress_pattern(args: argparse.Namespace) -> None:
+    """Suppress findings matching a pattern."""
     attestation = getattr(args, "attest", None)
     if not validate_attestation(attestation):
-        show_attestation_requirement("Ignore", attestation, ATTEST_EXAMPLE)
-        sys.exit(1)
+        show_attestation_requirement("Suppress", attestation, ATTEST_EXAMPLE)
+        raise CommandError("Suppress requires a valid attestation.")
 
     runtime = command_runtime(args)
     state_file = runtime.state_path
@@ -41,7 +41,7 @@ def cmd_ignore_pattern(args: argparse.Namespace) -> None:
     state.setdefault("attestation_log", []).append(
         {
             "timestamp": state.get("last_scan"),
-            "command": "ignore",
+            "command": "suppress",
             "pattern": args.pattern,
             "attestation": attestation,
             "affected": removed,
@@ -49,7 +49,7 @@ def cmd_ignore_pattern(args: argparse.Namespace) -> None:
     )
     _save_state_or_exit(state, state_file)
 
-    print(colorize(f"Added ignore pattern: {args.pattern}", "green"))
+    print(colorize(f"Added suppress pattern: {args.pattern}", "green"))
     if removed:
         print(f"  Removed {removed} matching findings from state.")
     config_warning = check_config_staleness(config)
@@ -61,12 +61,12 @@ def cmd_ignore_pattern(args: argparse.Namespace) -> None:
     lang_name = lang.name if lang else None
     narrative = narrative_mod.compute_narrative(
         state,
-        context=narrative_mod.NarrativeContext(lang=lang_name, command="ignore"),
+        context=narrative_mod.NarrativeContext(lang=lang_name, command="suppress"),
     )
     scores = state_mod.score_snapshot(state)
     write_query(
         {
-            "command": "ignore",
+            "command": "suppress",
             "pattern": args.pattern,
             "removed": removed,
             "overall_score": scores.overall,
@@ -79,4 +79,4 @@ def cmd_ignore_pattern(args: argparse.Namespace) -> None:
     )
 
 
-__all__ = ["cmd_ignore_pattern"]
+__all__ = ["cmd_suppress_pattern"]

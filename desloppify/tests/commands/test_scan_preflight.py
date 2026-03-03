@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from desloppify.app.commands.scan.scan_preflight import scan_queue_preflight
+from desloppify.core.exception_sets import CommandError
 
 
 # ── CI profile bypass ───────────────────────────────────────
@@ -48,6 +49,8 @@ def test_plan_without_start_scores_passes():
 
 def test_queue_clear_allows_scan():
     """When queue has zero remaining items, scan proceeds."""
+    from desloppify.app.commands.helpers.queue_progress import QueueBreakdown
+
     args = SimpleNamespace(profile=None, force_rescan=False, state=None, lang="python")
     plan = {"plan_start_scores": {"strict": 80.0}}
     with (
@@ -61,8 +64,8 @@ def test_queue_clear_allows_scan():
         ),
         patch("desloppify.app.commands.scan.scan_preflight.state_mod") as mock_state_mod,
         patch(
-            "desloppify.app.commands.scan.scan_preflight.plan_aware_queue_count",
-            return_value=0,
+            "desloppify.app.commands.scan.scan_preflight.plan_aware_queue_breakdown",
+            return_value=QueueBreakdown(queue_total=0, workflow=0),
         ),
     ):
         mock_state_mod.load_state.return_value = {"findings": {}}
@@ -73,7 +76,9 @@ def test_queue_clear_allows_scan():
 
 
 def test_queue_remaining_blocks_scan():
-    """When queue has remaining items, scan is blocked with sys.exit(1)."""
+    """When queue has remaining items, scan is blocked with CommandError."""
+    from desloppify.app.commands.helpers.queue_progress import QueueBreakdown
+
     args = SimpleNamespace(profile=None, force_rescan=False, state=None, lang="python")
     plan = {"plan_start_scores": {"strict": 80.0}}
     with (
@@ -87,14 +92,43 @@ def test_queue_remaining_blocks_scan():
         ),
         patch("desloppify.app.commands.scan.scan_preflight.state_mod") as mock_state_mod,
         patch(
-            "desloppify.app.commands.scan.scan_preflight.plan_aware_queue_count",
-            return_value=5,
+            "desloppify.app.commands.scan.scan_preflight.plan_aware_queue_breakdown",
+            return_value=QueueBreakdown(queue_total=5, workflow=0),
         ),
-        pytest.raises(SystemExit) as exc_info,
+        pytest.raises(CommandError) as exc_info,
     ):
         mock_state_mod.load_state.return_value = {"findings": {}}
         scan_queue_preflight(args)
-    assert exc_info.value.code == 1
+    assert exc_info.value.exit_code == 1
+
+
+def test_queue_with_only_workflow_items_allows_scan():
+    """When queue contains only workflow items (e.g. run-scan), gate passes
+    because breakdown.actionable == 0."""
+    from desloppify.app.commands.helpers.queue_progress import QueueBreakdown
+
+    args = SimpleNamespace(profile=None, force_rescan=False, state=None, lang="python")
+    plan = {"plan_start_scores": {"strict": 80.0}}
+    breakdown = QueueBreakdown(queue_total=1, workflow=1)
+    assert breakdown.actionable == 0  # precondition
+    with (
+        patch(
+            "desloppify.app.commands.scan.scan_preflight.load_plan",
+            return_value=plan,
+        ),
+        patch(
+            "desloppify.app.commands.scan.scan_preflight.state_path",
+            return_value="/tmp/test-state.json",
+        ),
+        patch("desloppify.app.commands.scan.scan_preflight.state_mod") as mock_state_mod,
+        patch(
+            "desloppify.app.commands.scan.scan_preflight.plan_aware_queue_breakdown",
+            return_value=breakdown,
+        ),
+    ):
+        mock_state_mod.load_state.return_value = {"findings": {}}
+        # Should NOT raise — workflow items don't block scanning
+        scan_queue_preflight(args)
 
 
 # ── --force-rescan ──────────────────────────────────────────
@@ -103,17 +137,17 @@ def test_queue_remaining_blocks_scan():
 def test_force_rescan_without_attest_exits():
     """--force-rescan without proper attestation is rejected."""
     args = SimpleNamespace(profile=None, force_rescan=True, attest=None)
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(CommandError) as exc_info:
         scan_queue_preflight(args)
-    assert exc_info.value.code == 1
+    assert exc_info.value.exit_code == 1
 
 
 def test_force_rescan_with_wrong_attest_exits():
     """--force-rescan with wrong attestation text is rejected."""
     args = SimpleNamespace(profile=None, force_rescan=True, attest="wrong text")
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(CommandError) as exc_info:
         scan_queue_preflight(args)
-    assert exc_info.value.code == 1
+    assert exc_info.value.exit_code == 1
 
 
 def test_force_rescan_with_valid_attest_passes():

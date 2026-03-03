@@ -382,7 +382,7 @@ def display_order() -> list[str]:
 
 _ACTION_PRIORITY = {"auto_fix": 0, "reorganize": 1, "refactor": 2, "manual_fix": 3}
 _ACTION_LABELS = {
-    "auto_fix": "fix",
+    "auto_fix": "autofix",
     "reorganize": "move",
     "refactor": "refactor",
     "manual_fix": "manual",

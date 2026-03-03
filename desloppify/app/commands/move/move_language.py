@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
 from types import ModuleType
 
 from desloppify import languages as lang_mod
 from desloppify.app.commands.helpers.lang import resolve_lang
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
 
 
@@ -74,11 +74,9 @@ def load_lang_move_module(lang_name: str) -> ModuleType:
     try:
         return importlib.import_module(module_name)
     except ImportError as ex:
-        print(
-            colorize(f"Move not yet supported for language: {lang_name} ({ex})", "red"),
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise CommandError(
+            f"Move not yet supported for language: {lang_name} ({ex})"
+        ) from ex
 
 
 def resolve_move_verify_hint(move_mod: ModuleType) -> str:

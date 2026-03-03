@@ -1,4 +1,4 @@
-"""Tests for cluster completion guard in plan done."""
+"""Tests for cluster completion guard in plan resolve."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _plan_with_cluster(name: str, finding_ids: list[str]) -> dict:
         "finding_ids": finding_ids,
         "auto": True,
         "cluster_key": f"auto::{name}",
-        "action": "fix",
+        "action": "autofix",
         "user_modified": False,
     }
     return plan

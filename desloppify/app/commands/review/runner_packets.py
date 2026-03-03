@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-import sys
 from copy import deepcopy
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+
+from desloppify.core.exception_sets import CommandError
 
 _BLIND_PACKET_DROP_KEYS = {
     "narrative",
@@ -124,16 +125,14 @@ def selected_batch_indexes(
     parse_fn,
     colorize_fn,
 ) -> list[int]:
-    """Validate selected batch indexes or exit with a CLI error."""
+    """Validate selected batch indexes or raise CommandError."""
     try:
         selected = parse_fn(raw_selection, batch_count)
     except ValueError as exc:
-        print(colorize_fn(f"  Error: {exc}", "red"), file=sys.stderr)
-        sys.exit(2)
+        raise CommandError(str(exc), exit_code=2) from exc
     if selected:
         return selected
-    print(colorize_fn("  Error: no batches selected", "red"), file=sys.stderr)
-    sys.exit(2)
+    raise CommandError("no batches selected", exit_code=2)
 
 
 def prepare_run_artifacts(

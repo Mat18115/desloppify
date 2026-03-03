@@ -9,7 +9,7 @@ from desloppify.app.commands.helpers.runtime import command_runtime
 from desloppify.app.commands.helpers.state import require_completed_scan
 from desloppify.app.commands.plan._resolve import resolve_ids_from_patterns
 from desloppify.core.output_api import colorize
-from desloppify.app.commands.plan.move_handlers import resolve_target
+from desloppify.app.commands.plan.reorder_handlers import resolve_target
 from desloppify.engine.plan import (
     add_to_cluster,
     append_log_entry,
@@ -140,7 +140,7 @@ def _cmd_cluster_delete(args: argparse.Namespace) -> None:
     print(colorize(f"  Deleted cluster {cluster_name} ({len(orphaned)} items orphaned).", "green"))
 
 
-def _cmd_cluster_move(args: argparse.Namespace) -> None:
+def _cmd_cluster_reorder(args: argparse.Namespace) -> None:
     raw_names: str = getattr(args, "cluster_names", "") or getattr(args, "cluster_name", "")
     cluster_names: list[str] = [n.strip() for n in raw_names.split(",") if n.strip()]
     position: str = getattr(args, "position", "top")
@@ -182,7 +182,7 @@ def _cmd_cluster_move(args: argparse.Namespace) -> None:
 
     count = move_items(plan, all_member_ids, position, target=target, offset=offset)
     append_log_entry(
-        plan, "cluster_move", cluster_name=",".join(cluster_names), actor="user",
+        plan, "cluster_reorder", cluster_name=",".join(cluster_names), actor="user",
         detail={"position": position, "count": count},
     )
     save_plan(plan)
@@ -245,7 +245,7 @@ def _cmd_cluster_show(args: argparse.Namespace) -> None:
     # Commands
     print()
     print(colorize("  Commands:", "dim"))
-    print(colorize(f'    Resolve all:  desloppify plan done "{cluster_name}" --note "<what>" --attest "..."', "dim"))
+    print(colorize(f'    Resolve all:  desloppify plan resolve "{cluster_name}" --note "<what>" --attest "..."', "dim"))
     print(colorize(f"    Drill in:     desloppify next --cluster {cluster_name} --count 10", "dim"))
     print(colorize(f"    Skip:         desloppify plan skip {cluster_name}", "dim"))
 
@@ -341,7 +341,7 @@ def cmd_cluster_dispatch(args: argparse.Namespace) -> None:
         "add": _cmd_cluster_add,
         "remove": _cmd_cluster_remove,
         "delete": _cmd_cluster_delete,
-        "move": _cmd_cluster_move,
+        "reorder": _cmd_cluster_reorder,
         "show": _cmd_cluster_show,
         "list": _cmd_cluster_list,
         "update": _cmd_cluster_update,

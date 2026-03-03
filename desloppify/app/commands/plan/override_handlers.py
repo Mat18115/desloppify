@@ -16,6 +16,7 @@ from desloppify.app.commands.resolve.selection import (
     validate_attestation,
     validate_note_length,
 )
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_api import colorize
 from desloppify.engine.plan import (
     annotate_finding,
@@ -381,7 +382,7 @@ def _print_cluster_guard(cluster_name: str, finding_ids: list[str], state: dict)
         "dim",
     ))
     print(colorize(
-        f"  Or mark each done: desloppify plan done <id> --note '...' --confirm\n",
+        f"  Or mark each resolved: desloppify plan resolve <id> --note '...' --confirm\n",
         "dim",
     ))
 
@@ -432,7 +433,7 @@ def _blocked_triage_stages(plan: dict) -> dict[str, list[str]]:
     return blocked
 
 
-def cmd_plan_done(args: argparse.Namespace) -> None:
+def cmd_plan_resolve(args: argparse.Namespace) -> None:
     """Mark findings as fixed — delegates to cmd_resolve for rich UX."""
     patterns: list[str] = getattr(args, "patterns", [])
     attestation: str | None = getattr(args, "attest", None)
@@ -479,7 +480,7 @@ def cmd_plan_done(args: argparse.Namespace) -> None:
 
     # Pre-validate attestation before delegating (avoids stale hint in resolve)
     if not validate_attestation(attestation):
-        show_attestation_requirement("Plan done", attestation, ATTEST_EXAMPLE)
+        show_attestation_requirement("Plan resolve", attestation, ATTEST_EXAMPLE)
         return
 
     # Cluster completion guard: block bulk-completing small clusters
@@ -489,7 +490,7 @@ def cmd_plan_done(args: argparse.Namespace) -> None:
         plan = load_plan()
         if _check_cluster_guard(patterns, plan, state):
             return
-    except (OSError, ValueError, KeyError, TypeError):
+    except PLAN_LOAD_EXCEPTIONS:
         plan = None
 
     # Log the done action (best-effort)
@@ -511,8 +512,8 @@ def cmd_plan_done(args: argparse.Namespace) -> None:
             note=note,
         )
         save_plan(plan)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        print(colorize(f"  Note: unable to append plan done log entry ({exc}).", "dim"))
+    except PLAN_LOAD_EXCEPTIONS as exc:
+        print(colorize(f"  Note: unable to append plan resolve log entry ({exc}).", "dim"))
 
     # Deferred import: cmd_resolve has a heavy import chain that isn't needed
     # for synthetic-ID handling above.
@@ -575,7 +576,7 @@ def cmd_plan_focus(args: argparse.Namespace) -> None:
 
 __all__ = [
     "cmd_plan_describe",
-    "cmd_plan_done",
+    "cmd_plan_resolve",
     "cmd_plan_focus",
     "cmd_plan_note",
     "cmd_plan_reopen",

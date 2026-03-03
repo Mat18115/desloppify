@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from desloppify.core.exception_sets import CommandError
+
 # ── 1. resolve/render.py ────────────────────────────────────────────────────
 from desloppify.app.commands.resolve.render import (
     _delta_suffix,
@@ -563,9 +565,9 @@ class TestCmdReviewEntrypoint:
             session_id=None,
         )
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_review(args)
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     @patch("desloppify.app.commands.review.entrypoint.resolve_lang")
     @patch("desloppify.app.commands.review.entrypoint.command_runtime")
@@ -586,9 +588,9 @@ class TestCmdReviewEntrypoint:
             session_id=None,
         )
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_review(args)
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     @patch("desloppify.app.commands.review.entrypoint.do_external_start")
     @patch("desloppify.app.commands.review.entrypoint.resolve_lang")
@@ -660,15 +662,14 @@ class TestCmdReviewEntrypoint:
             session_id=None,
         )
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_review(args)
-        assert exc_info.value.code == 2
+        assert exc_info.value.exit_code == 2
 
     @patch("desloppify.app.commands.review.entrypoint.resolve_lang", return_value=None)
     @patch("desloppify.app.commands.review.entrypoint.command_runtime")
-    @patch("desloppify.app.commands.review.entrypoint.colorize", side_effect=lambda t, _c: t)
-    def test_exits_when_no_lang(self, _mock_colorize, mock_runtime, mock_resolve_lang):
-        """When resolve_lang returns None, prints error and exits."""
+    def test_exits_when_no_lang(self, mock_runtime, mock_resolve_lang):
+        """When resolve_lang returns None, raises CommandError."""
         rt = MagicMock()
         rt.state = {"findings": {}}
         rt.state_path = "/tmp/state.json"
@@ -676,9 +677,9 @@ class TestCmdReviewEntrypoint:
         mock_runtime.return_value = rt
         args = argparse.Namespace()
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_review(args)
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
 
 # ── 6. update_skill.py ──────────────────────────────────────────────────────

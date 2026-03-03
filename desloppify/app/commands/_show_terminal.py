@@ -1,12 +1,15 @@
-"""Terminal rendering helpers for `desloppify fix --dry-run`."""
+"""Terminal rendering helpers for `desloppify autofix --dry-run`."""
 
 from __future__ import annotations
 
+import logging
 import random
 from pathlib import Path
 
 from desloppify.core.discovery_api import rel
 from desloppify.core.output_api import colorize
+
+_logger = logging.getLogger(__name__)
 
 
 def show_fix_dry_run_samples(entries: list[dict], results: list[dict]) -> None:
@@ -26,7 +29,8 @@ def _print_fix_file_sample(result: dict, entries: list[dict]) -> None:
     try:
         path = Path(filepath) if Path(filepath).is_absolute() else Path(".") / filepath
         lines = path.read_text().splitlines()
-    except (OSError, UnicodeDecodeError):
+    except (OSError, UnicodeDecodeError) as exc:
+        _logger.debug("dry-run sample skipped for %s: %s", filepath, exc)
         return
 
     file_entries = [entry for entry in entries if entry["file"] == filepath and entry.get("name", "") in removed_set]

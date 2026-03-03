@@ -56,7 +56,7 @@ def _cmd_commit_log_status(plan: dict) -> None:
 
     if not uncommitted and not commit_log:
         print(colorize("\n  No commit tracking data yet.", "dim"))
-        print(colorize("  Resolve findings with `desloppify resolve` or `desloppify plan done` to start.", "dim"))
+        print(colorize("  Resolve findings with `desloppify resolve` or `desloppify plan resolve` to start.", "dim"))
 
 
 def _cmd_commit_log_record(args: argparse.Namespace, plan: dict) -> None:

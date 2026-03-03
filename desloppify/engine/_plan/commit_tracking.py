@@ -203,7 +203,7 @@ def suggest_commit_message(
     summary = " ".join(summary_parts)
 
     return template.format(
-        status="fix",
+        status="autofix",
         count=len(uncommitted),
         summary=summary,
     )

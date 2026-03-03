@@ -6,7 +6,7 @@ import desloppify.app.commands.exclude_cmd as exclude_cmd_mod
 import desloppify.app.commands.plan._resolve as plan_resolve_mod
 import desloppify.app.commands.plan.cluster_handlers as plan_cluster_handlers_mod
 import desloppify.app.commands.plan.cmd as plan_cmd_mod
-import desloppify.app.commands.plan.move_handlers as plan_move_handlers_mod
+import desloppify.app.commands.plan.reorder_handlers as plan_reorder_handlers_mod
 import desloppify.app.commands.plan.queue_render as plan_queue_render_mod
 import desloppify.app.commands.resolve.apply as resolve_apply_mod
 import desloppify.app.commands.resolve.cmd as resolve_cmd_mod
@@ -37,7 +37,7 @@ def test_direct_coverage_scan_plan_go_modules_smoke():
     assert callable(plan_resolve_mod.resolve_ids_from_patterns)
     assert callable(plan_cluster_handlers_mod.cmd_cluster_dispatch)
     assert callable(plan_cmd_mod.cmd_plan)
-    assert callable(plan_move_handlers_mod.cmd_plan_move)
+    assert callable(plan_reorder_handlers_mod.cmd_plan_reorder)
     assert callable(plan_queue_render_mod.cmd_plan_queue)
     assert callable(assessment_integrity_mod.bind_scorecard_subjective_at_target)
     assert callable(batch_prompt_template_mod.render_batch_prompt)

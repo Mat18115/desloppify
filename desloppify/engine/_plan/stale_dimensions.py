@@ -33,6 +33,8 @@ TRIAGE_STAGE_IDS = (
 TRIAGE_IDS = set(TRIAGE_STAGE_IDS)
 WORKFLOW_CREATE_PLAN_ID = "workflow::create-plan"
 WORKFLOW_SCORE_CHECKPOINT_ID = "workflow::score-checkpoint"
+WORKFLOW_IMPORT_SCORES_ID = "workflow::import-scores"
+WORKFLOW_COMMUNICATE_SCORE_ID = "workflow::communicate-score"
 WORKFLOW_PREFIX = "workflow::"
 SYNTHETIC_PREFIXES = ("triage::", "workflow::", "subjective::")
 
@@ -367,7 +369,9 @@ def sync_triage_needed(
     """Inject 4 triage stage IDs at front of queue when review findings change.
 
     Only injects stages not already confirmed in ``epic_triage_meta``.
-    Never auto-prunes — only explicit completion removes them.
+
+    When stages are already present but all new findings have been resolved
+    since injection, auto-prunes the stale stages and updates the hash.
 
     When findings are *resolved* (current IDs are a subset of previously
     triaged IDs), the snapshot hash is updated silently — no re-triage
@@ -385,7 +389,34 @@ def sync_triage_needed(
     current_hash = review_finding_snapshot_hash(state)
     last_hash = meta.get("finding_snapshot_hash", "")
 
-    if current_hash and current_hash != last_hash and not already_present:
+    if already_present:
+        # Stages present — check if the reason for injection still applies.
+        # Only auto-prune when triage was completed before (hash exists),
+        # all new findings have been resolved, and no triage work is in
+        # progress.  This avoids pruning the initial triage or a
+        # user-started triage session.
+        if last_hash and not confirmed:
+            findings = state.get("findings", {})
+            current_review_ids = {
+                fid for fid, f in findings.items()
+                if f.get("status") == "open"
+                and f.get("detector") in ("review", "concerns")
+            }
+            triaged_ids = set(meta.get("triaged_ids", []))
+            new_since_triage = current_review_ids - triaged_ids
+
+            if not new_since_triage:
+                # No new findings remain — prune stale stages
+                for sid in TRIAGE_STAGE_IDS:
+                    while sid in order:
+                        order.remove(sid)
+                if current_hash:
+                    meta["finding_snapshot_hash"] = current_hash
+                    plan["epic_triage_meta"] = meta
+                result.pruned = True
+        return result
+
+    if current_hash and current_hash != last_hash:
         # Distinguish "new findings appeared" from "findings were resolved".
         # Only re-triage when genuinely new findings exist.
         findings = state.get("findings", {})
@@ -551,25 +582,20 @@ def compute_new_finding_ids(plan: PlanModel, state: StateModel) -> set[str]:
 def is_triage_stale(plan: PlanModel, state: StateModel) -> bool:
     """Side-effect-free check: is triage needed?
 
-    Returns True when any ``triage::*`` stage ID is in the queue OR
-    genuinely *new* review findings appeared since the last triage.
+    Returns True when genuinely *new* review findings appeared since the
+    last triage.  Triage stage IDs being in the queue alone is not
+    sufficient — the new findings that triggered injection may have been
+    resolved since then.
 
     When findings are merely resolved (current IDs are a subset of
     previously triaged IDs), triage is NOT stale — the user is working
     through the plan.
     """
     ensure_plan_defaults(plan)
-    order = set(plan.get("queue_order", []))
-    if order & TRIAGE_IDS:
-        return True
     meta = plan.get("epic_triage_meta", {})
-    last_hash = meta.get("finding_snapshot_hash", "")
-    if not last_hash:
-        return False
-    current_hash = review_finding_snapshot_hash(state)
-    if not current_hash or current_hash == last_hash:
-        return False
-    # Hash changed — check if new findings appeared or only resolutions
+
+    # Always check for genuinely new findings (same logic regardless of
+    # whether triage stages are in the queue).
     findings = state.get("findings", {})
     current_review_ids = {
         fid for fid, f in findings.items()
@@ -578,8 +604,110 @@ def is_triage_stale(plan: PlanModel, state: StateModel) -> bool:
     }
     triaged_ids = set(meta.get("triaged_ids", []))
     new_since_triage = current_review_ids - triaged_ids
-    return bool(new_since_triage)
+    if new_since_triage:
+        return True
 
+    # If triage stages are in queue but there's in-progress triage work,
+    # still consider it stale so the user finishes what they started.
+    confirmed = set(meta.get("triage_stages", {}).keys())
+    if confirmed:
+        order = set(plan.get("queue_order", []))
+        if order & TRIAGE_IDS:
+            return True
+
+    return False
+
+
+@dataclass
+class ImportScoresSyncResult:
+    """What changed during an import-scores sync."""
+
+    injected: bool = False
+
+    @property
+    def changes(self) -> int:
+        return int(self.injected)
+
+
+def sync_import_scores_needed(
+    plan: PlanModel,
+    state: StateModel,
+    *,
+    assessment_mode: str | None = None,
+) -> ImportScoresSyncResult:
+    """Inject ``workflow::import-scores`` after findings-only import.
+
+    Only injects when:
+    - Assessment mode was ``findings_only`` (scores were skipped)
+    - ``workflow::import-scores`` is not already in the queue
+    - There are assessments in the payload that could be imported
+
+    Positioned after score-checkpoint, before create-plan.
+    """
+    ensure_plan_defaults(plan)
+    result = ImportScoresSyncResult()
+    order: list[str] = plan["queue_order"]
+
+    if WORKFLOW_IMPORT_SCORES_ID in order:
+        return result
+
+    # Only inject when scores were skipped (findings-only mode)
+    if assessment_mode != "findings_only":
+        return result
+
+    # Insert after any subjective/workflow items
+    insert_at = 0
+    for i, fid in enumerate(order):
+        if fid.startswith(SUBJECTIVE_PREFIX) or fid.startswith(WORKFLOW_PREFIX):
+            insert_at = i + 1
+    order.insert(insert_at, WORKFLOW_IMPORT_SCORES_ID)
+    result.injected = True
+    return result
+
+
+@dataclass
+class CommunicateScoreSyncResult:
+    """What changed during a communicate-score sync."""
+
+    injected: bool = False
+
+    @property
+    def changes(self) -> int:
+        return int(self.injected)
+
+
+def sync_communicate_score_needed(
+    plan: PlanModel,
+    state: StateModel,
+    *,
+    scores_just_imported: bool = False,
+) -> CommunicateScoreSyncResult:
+    """Inject ``workflow::communicate-score`` after scores are imported.
+
+    Only injects when:
+    - Scores were just imported (trusted or attested)
+    - ``workflow::communicate-score`` is not already in the queue
+
+    Positioned after import-scores/score-checkpoint, before create-plan.
+    """
+    ensure_plan_defaults(plan)
+    result = CommunicateScoreSyncResult()
+    order: list[str] = plan["queue_order"]
+
+    if WORKFLOW_COMMUNICATE_SCORE_ID in order:
+        return result
+
+    if not scores_just_imported:
+        return result
+
+    # Insert after any subjective/workflow items
+    insert_at = 0
+    for i, fid in enumerate(order):
+        if fid.startswith(SUBJECTIVE_PREFIX) or fid.startswith(WORKFLOW_PREFIX):
+            insert_at = i + 1
+    order.insert(insert_at, WORKFLOW_COMMUNICATE_SCORE_ID)
+    result.injected = True
+    return result
 
 
 __all__ = [
@@ -590,10 +718,14 @@ __all__ = [
     "TRIAGE_PREFIX",
     "TRIAGE_STAGE_IDS",
     "SYNTHETIC_PREFIXES",
+    "WORKFLOW_COMMUNICATE_SCORE_ID",
     "WORKFLOW_CREATE_PLAN_ID",
+    "WORKFLOW_IMPORT_SCORES_ID",
     "WORKFLOW_PREFIX",
     "WORKFLOW_SCORE_CHECKPOINT_ID",
+    "CommunicateScoreSyncResult",
     "CreatePlanSyncResult",
+    "ImportScoresSyncResult",
     "ScoreCheckpointSyncResult",
     "StaleDimensionSyncResult",
     "TriageSyncResult",
@@ -603,7 +735,9 @@ __all__ = [
     "compute_new_finding_ids",
     "is_triage_stale",
     "review_finding_snapshot_hash",
+    "sync_communicate_score_needed",
     "sync_create_plan_needed",
+    "sync_import_scores_needed",
     "sync_score_checkpoint_needed",
     "sync_stale_dimensions",
     "sync_triage_needed",

@@ -14,6 +14,7 @@ import pytest
 
 from desloppify import state as state_mod
 from desloppify.app.commands.review import batches as review_batches_mod
+from desloppify.app.commands.review import batches_scope as review_scope_mod
 from desloppify.app.commands.review import runner_helpers as runner_helpers_mod
 from desloppify.app.commands.review.batch import (
     _do_run_batches,
@@ -22,6 +23,7 @@ from desloppify.app.commands.review.import_cmd import do_import as _do_import
 from desloppify.app.commands.review.import_cmd import (
     do_validate_import as _do_validate_import,
 )
+from desloppify.core.exception_sets import CommandError
 from desloppify.app.commands.review.prepare import do_prepare as _do_prepare
 from desloppify.app.commands.review.runtime import setup_lang_concrete as _setup_lang
 from desloppify.engine.policy.zones import Zone, ZoneRule
@@ -39,7 +41,7 @@ from desloppify.tests.review.shared_review_fixtures import (
 
 class TestBatchDimensionCoverageNotices:
     def test_preflight_notice_warns_when_scope_is_subset(self, capsys):
-        review_batches_mod._print_preflight_dimension_scope_notice(
+        review_scope_mod.print_preflight_dimension_scope_notice(
             selected_dims=["high_level_elegance", "mid_level_elegance"],
             scored_dims=[
                 "high_level_elegance",
@@ -57,7 +59,7 @@ class TestBatchDimensionCoverageNotices:
         assert "--dimensions low_level_elegance" in out
 
     def test_import_notice_warns_and_returns_missing_dimensions(self, capsys):
-        missing = review_batches_mod._print_import_dimension_coverage_notice(
+        missing = review_scope_mod.print_import_dimension_coverage_notice(
             assessed_dims=["naming_quality", "logic_clarity"],
             scored_dims=[
                 "naming_quality",
@@ -335,7 +337,7 @@ class TestCmdReviewPrepare:
         lang = MagicMock()
         lang.name = "typescript"
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(CommandError):
             _do_import(
                 str(findings_file),
                 empty_state,
@@ -552,7 +554,7 @@ class TestCmdReviewPrepare:
         lang = MagicMock()
         lang.name = "typescript"
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(CommandError):
             _do_validate_import(
                 str(findings_file),
                 lang,
@@ -565,7 +567,7 @@ class TestCmdReviewPrepare:
         lang = MagicMock()
         lang.name = "typescript"
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(CommandError):
             _do_import("/nonexistent/findings.json", empty_state, lang, "sp")
 
     def test_do_import_rejects_non_array(self, empty_state, tmp_path):
@@ -575,7 +577,7 @@ class TestCmdReviewPrepare:
         lang = MagicMock()
         lang.name = "typescript"
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(CommandError):
             _do_import(str(bad_file), empty_state, lang, "sp")
 
     def test_do_import_rejects_invalid_json(self, empty_state, tmp_path):
@@ -585,7 +587,7 @@ class TestCmdReviewPrepare:
         lang = MagicMock()
         lang.name = "typescript"
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(CommandError):
             _do_import(str(bad_file), empty_state, lang, "sp")
 
     def test_do_import_fails_closed_on_skipped_findings(self, empty_state, tmp_path):
@@ -610,7 +612,7 @@ class TestCmdReviewPrepare:
         lang.name = "typescript"
 
         with patch("desloppify.state.save_state") as mock_save:
-            with pytest.raises(SystemExit):
+            with pytest.raises(CommandError):
                 _do_import(str(findings_file), empty_state, lang, "sp")
         assert mock_save.called is False
         assert empty_state.get("subjective_assessments", {}) == {}
@@ -752,15 +754,15 @@ class TestCmdReviewPrepare:
                 "desloppify.app.commands.review.prepare.write_query",
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
             patch(
@@ -968,15 +970,15 @@ class TestCmdReviewPrepare:
                 side_effect=fake_import,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
@@ -1102,15 +1104,15 @@ class TestCmdReviewPrepare:
                 side_effect=fake_import,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
@@ -1217,15 +1219,15 @@ class TestCmdReviewPrepare:
                 ),
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
@@ -1328,15 +1330,15 @@ class TestCmdReviewPrepare:
                 side_effect=fake_import,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
@@ -1468,15 +1470,15 @@ class TestCmdReviewPrepare:
                 side_effect=fake_import,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
@@ -1545,21 +1547,21 @@ class TestCmdReviewPrepare:
                 side_effect=fake_subprocess_run,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(CommandError) as exc_info:
                 _do_run_batches(args, empty_state, lang, "fake_sp", config={})
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     def test_do_run_batches_keeps_abstraction_component_breakdown(
         self, empty_state, tmp_path
@@ -1658,15 +1660,15 @@ class TestCmdReviewPrepare:
                 side_effect=fake_import,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
@@ -2018,7 +2020,7 @@ class TestCmdReviewPrepare:
 
         assert failures == []
 
-    def test_print_failures_and_exit_shows_codex_missing_hint(self, tmp_path, capsys):
+    def test_print_failures_and_raise_shows_codex_missing_hint(self, tmp_path, capsys):
         from desloppify.app.commands.review import runner_helpers as runner_helpers_mod
 
         logs_dir = tmp_path / "logs"
@@ -2026,19 +2028,19 @@ class TestCmdReviewPrepare:
         (logs_dir / "batch-1.log").write_text(
             "$ codex exec --ephemeral ...\n\nRUNNER ERROR:\n[Errno 2] No such file or directory: 'codex'\n"
         )
-        with pytest.raises(SystemExit) as exc_info:
-            runner_helpers_mod.print_failures_and_exit(
+        with pytest.raises(CommandError) as exc_info:
+            runner_helpers_mod.print_failures_and_raise(
                 failures=[0],
                 packet_path=tmp_path / "packet.json",
                 logs_dir=logs_dir,
                 colorize_fn=lambda text, _style: text,
             )
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
         err = capsys.readouterr().err
         assert "Environment hints:" in err
         assert "codex CLI not found on PATH" in err
 
-    def test_print_failures_and_exit_shows_codex_auth_hint(self, tmp_path, capsys):
+    def test_print_failures_and_raise_shows_codex_auth_hint(self, tmp_path, capsys):
         from desloppify.app.commands.review import runner_helpers as runner_helpers_mod
 
         logs_dir = tmp_path / "logs"
@@ -2046,14 +2048,14 @@ class TestCmdReviewPrepare:
         (logs_dir / "batch-1.log").write_text(
             "$ codex exec --ephemeral ...\n\nSTDERR:\nAuthentication failed: please login first.\n"
         )
-        with pytest.raises(SystemExit) as exc_info:
-            runner_helpers_mod.print_failures_and_exit(
+        with pytest.raises(CommandError) as exc_info:
+            runner_helpers_mod.print_failures_and_raise(
                 failures=[0],
                 packet_path=tmp_path / "packet.json",
                 logs_dir=logs_dir,
                 colorize_fn=lambda text, _style: text,
             )
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
         err = capsys.readouterr().err
         assert "Environment hints:" in err
         assert "codex login" in err
@@ -2255,22 +2257,22 @@ class TestCmdReviewPrepare:
                 return_value=7,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(CommandError) as exc_info:
                 _do_run_batches(args, empty_state, lang, "fake_sp", config={})
 
-        assert exc_info.value.code == 7
+        assert exc_info.value.exit_code == 7
 
     def test_do_run_batches_keyboard_interrupt_writes_partial_summary(
         self, empty_state, tmp_path
@@ -2317,15 +2319,15 @@ class TestCmdReviewPrepare:
                 side_effect=KeyboardInterrupt,
             ),
             patch(
-                "desloppify.app.commands.review.batch.PROJECT_ROOT",
+                "desloppify.app.commands.review.runtime_paths.PROJECT_ROOT",
                 tmp_path,
             ),
             patch(
-                "desloppify.app.commands.review.batch.REVIEW_PACKET_DIR",
+                "desloppify.app.commands.review.runtime_paths.REVIEW_PACKET_DIR",
                 review_packet_dir,
             ),
             patch(
-                "desloppify.app.commands.review.batch.SUBAGENT_RUNS_DIR",
+                "desloppify.app.commands.review.runtime_paths.SUBAGENT_RUNS_DIR",
                 runs_dir,
             ),
         ):

@@ -199,7 +199,6 @@ def load_matches(
         state,
         options=QueueBuildOptions(
             count=None,
-            scan_path=state.get("scan_path"),
             scope=scope,
             status=status_filter,
             include_subjective=False,

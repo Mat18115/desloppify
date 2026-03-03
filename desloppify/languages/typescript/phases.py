@@ -16,7 +16,6 @@ from desloppify.engine.detectors import graph as graph_detector_mod
 from desloppify.engine.detectors import large as large_detector_mod
 from desloppify.engine.detectors import naming as naming_detector_mod
 from desloppify.engine.detectors import orphaned as orphaned_detector_mod
-from desloppify.engine.detectors import signature as signature_detector_mod
 from desloppify.engine.detectors import single_use as single_use_detector_mod
 from desloppify.engine.detectors.base import ComplexitySignal, GodRule
 from desloppify.engine.policy.zones import adjust_potential, filter_entries
@@ -582,32 +581,6 @@ def phase_coupling(path: Path, lang: LangRun) -> tuple[list[Finding], dict[str, 
 def phase_smells(path: Path, lang: LangRun) -> tuple[list[Finding], dict[str, int]]:
     smell_entries, total_smell_files = smells_detector_mod.detect_smells(path)
     results = make_smell_findings(smell_entries, log)
-
-    # Cross-file: signature variance
-    functions = lang.extract_functions(path) if lang.extract_functions else []
-    sig_entries, _ = signature_detector_mod.detect_signature_variance(functions)
-    for e in sig_entries:
-        results.append(
-            make_finding(
-                "smells",
-                e["files"][0],
-                f"sig_variance::{e['name']}",
-                tier=3,
-                confidence="medium",
-                summary=f"Signature variance: {e['name']}() has {e['signature_count']} "
-                f"different signatures across {e['file_count']} files",
-                detail={
-                    "function": e["name"],
-                    "file_count": e["file_count"],
-                    "signature_count": e["signature_count"],
-                    "variants": e["variants"][:5],
-                },
-            )
-        )
-    if sig_entries:
-        log(
-            f"         signature variance: {len(sig_entries)} functions with inconsistent signatures"
-        )
 
     # TS-specific: React state sync anti-patterns
     react_entries, total_effects = react_detector_mod.detect_state_sync(path)

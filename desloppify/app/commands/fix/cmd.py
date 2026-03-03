@@ -17,15 +17,11 @@ from .apply_flow import (
     _warn_uncommitted_changes,
 )
 from .options import _load_fixer
-from .review_flow import _cmd_fix_review
 
 
 def cmd_fix(args: argparse.Namespace) -> None:
     """Auto-fix mechanical issues."""
     fixer_name = args.fixer
-    if fixer_name == "review":
-        _cmd_fix_review(args)
-        return
 
     dry_run = getattr(args, "dry_run", False)
     path = Path(args.path)

@@ -654,9 +654,9 @@ class TestComputeReminders:
             [],
             {},
             {},
-            "fix",
+            "autofix",
         )
-        # "rescan_needed" would fire for command="fix" but history count=3 -> suppressed
+        # "rescan_needed" would fire for command="autofix" but history count=3 -> suppressed
         reminder_types = [r["type"] for r in reminders]
         assert "rescan_needed" not in reminder_types
 
@@ -674,7 +674,7 @@ class TestComputeReminders:
             [],
             {},
             {},
-            "fix",
+            "autofix",
         )
         reminder_types = [r["type"] for r in reminders]
         assert "rescan_needed" in reminder_types
@@ -693,7 +693,7 @@ class TestComputeReminders:
             [],
             {},
             {},
-            "fix",
+            "autofix",
         )
         assert updated["rescan_needed"] == 2
 
@@ -707,7 +707,7 @@ class TestComputeReminders:
             [],
             {},
             {},
-            "fix",
+            "autofix",
         )
         reminder_types = [r["type"] for r in reminders]
         assert "rescan_needed" in reminder_types
@@ -836,7 +836,7 @@ class TestComputeReminders:
             {
                 "type": "auto_fix",
                 "count": 5,
-                "command": "desloppify fix unused-imports --dry-run",
+                "command": "desloppify autofix unused-imports --dry-run",
             }
         ]
         reminders, _ = _compute_reminders(
@@ -859,7 +859,7 @@ class TestComputeReminders:
             {
                 "type": "auto_fix",
                 "count": 5,
-                "command": "desloppify fix unused-imports --dry-run",
+                "command": "desloppify autofix unused-imports --dry-run",
             }
         ]
         reminders, _ = _compute_reminders(
@@ -901,7 +901,7 @@ class TestComputeReminders:
             {
                 "type": "auto_fix",
                 "count": 3,
-                "command": "desloppify fix unused-imports --dry-run",
+                "command": "desloppify autofix unused-imports --dry-run",
             }
         ]
         reminders, _ = _compute_reminders(
@@ -919,10 +919,10 @@ class TestComputeReminders:
 
     def test_reminders_include_metadata_and_rank_high_priority_first(self):
         state = {"strict_score": 50.0}
-        actions = [{"type": "auto_fix", "count": 3, "command": "desloppify fix unused-imports --dry-run"}]
+        actions = [{"type": "auto_fix", "count": 3, "command": "desloppify autofix unused-imports --dry-run"}]
         reminders, _ = _compute_reminders(
             state, "typescript", "middle_grind", {"trend": "growing"},
-            actions, {}, {}, "fix",
+            actions, {}, {}, "autofix",
         )
         reminder_types = [r["type"] for r in reminders]
         assert "rescan_needed" in reminder_types
@@ -946,7 +946,7 @@ class TestComputeReminders:
             [],
             {},
             {},
-            "fix",
+            "autofix",
         )
         # Original should be unchanged
         assert original_history == {"rescan_needed": 1}
@@ -999,7 +999,7 @@ class TestComputeReminders:
             "strict_score": 50.0,
             "scan_history": [{"strict_score": 45.0}, {"strict_score": 50.0}],
         }
-        for cmd in ("fix", "resolve", "show", "next", None):
+        for cmd in ("autofix", "resolve", "show", "next", None):
             reminders, _ = _compute_reminders(
                 state,
                 "python",
@@ -2158,7 +2158,7 @@ class TestStrategyReviewHint:
                 "detector": "unused",
                 "count": 1,
                 "impact": 1.0,
-                "command": "desloppify fix unused",
+                "command": "desloppify autofix unused",
             },
             {
                 "priority": 2,
@@ -2187,7 +2187,7 @@ class TestStrategyReviewHint:
                 "detector": "unused",
                 "count": 1,
                 "impact": 1.0,
-                "command": "desloppify fix unused",
+                "command": "desloppify autofix unused",
             },
         ]
         result = _compute_strategy(

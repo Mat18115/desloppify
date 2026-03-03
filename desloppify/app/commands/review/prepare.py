@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from desloppify.app.commands.helpers.query import write_query
 from . import runtime as review_runtime_mod
 from desloppify.core.coercions_api import coerce_positive_int
+from desloppify.core.exception_sets import CommandError
 from desloppify.intelligence import narrative as narrative_mod
 from desloppify.intelligence import review as review_mod
 from desloppify.core.output_api import colorize
@@ -72,33 +72,16 @@ def do_prepare(
     data["next_command"] = next_command
     total = data.get("total_files", 0)
     if total == 0:
-        print(
-            colorize(
-                f"\n  Error: no files found at path '{path}'. "
-                "Nothing to review.",
-                "red",
-            ),
-            file=sys.stderr,
-        )
+        msg = f"no files found at path '{path}'. Nothing to review."
         scan_path = state.get("scan_path") if isinstance(state, dict) else None
         if scan_path:
-            print(
-                colorize(
-                    f"  Hint: your last scan used --path {scan_path}. "
-                    f"Try: desloppify review --prepare --path {scan_path}",
-                    "yellow",
-                ),
-                file=sys.stderr,
+            msg += (
+                f"\nHint: your last scan used --path {scan_path}. "
+                f"Try: desloppify review --prepare --path {scan_path}"
             )
         else:
-            print(
-                colorize(
-                    "  Hint: pass --path <dir> matching the path used during scan.",
-                    "yellow",
-                ),
-                file=sys.stderr,
-            )
-        sys.exit(1)
+            msg += "\nHint: pass --path <dir> matching the path used during scan."
+        raise CommandError(msg, exit_code=1)
     write_query(data)
     _print_prepare_summary(data, next_command=next_command, retrospective=retrospective)
 

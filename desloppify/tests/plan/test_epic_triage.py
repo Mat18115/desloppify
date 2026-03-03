@@ -20,10 +20,11 @@ from desloppify.engine._plan.schema import (
 )
 from desloppify.engine._plan.stale_dimensions import (
     TRIAGE_STAGE_IDS,
+    is_triage_stale,
     review_finding_snapshot_hash,
     sync_triage_needed,
 )
-from desloppify.engine._work_queue.helpers import build_triage_stage_items
+from desloppify.engine._work_queue.synthetic import build_triage_stage_items
 
 
 # ---------------------------------------------------------------------------
@@ -213,23 +214,118 @@ class TestSyncTriageNeeded:
         # All IDs remain (sync never prunes)
         assert all(sid in plan["queue_order"] for sid in TRIAGE_STAGE_IDS)
 
-    def test_no_auto_prune_even_after_stages_cleared(self):
-        """Even with cleared stages, triage IDs are not auto-pruned.
-
-        _apply_completion() removes triage IDs explicitly —
-        sync_triage_needed should never prune them.
-        """
+    def test_no_auto_prune_when_new_findings_remain(self):
+        """Stages not pruned when genuinely new findings still exist."""
         state = _state_with_review_findings("r1")
         h = review_finding_snapshot_hash(state)
         plan = empty_plan()
         plan["queue_order"] = list(TRIAGE_STAGE_IDS)
         plan["epic_triage_meta"] = {
             "finding_snapshot_hash": h,
-            "triage_stages": {},  # cleared on completion
+            "triaged_ids": [],  # r1 not triaged
+            "triage_stages": {},
         }
         result = sync_triage_needed(plan, state)
         assert not result.pruned
         assert all(sid in plan["queue_order"] for sid in TRIAGE_STAGE_IDS)
+
+    def test_auto_prune_when_new_findings_resolved(self):
+        """Stages auto-pruned when all new findings that triggered injection
+        have been resolved and triage was completed before (hash exists)."""
+        # Start: r1 was triaged, then r2 appeared (triggering injection),
+        # then r2 was resolved. Stages should be pruned.
+        state = _state_with_review_findings("r1")
+        plan = empty_plan()
+        plan["queue_order"] = list(TRIAGE_STAGE_IDS) + ["item1"]
+        plan["epic_triage_meta"] = {
+            "finding_snapshot_hash": "stale_hash",
+            "triaged_ids": ["r1"],  # r1 was triaged, r2 was new
+            "triage_stages": {},  # no in-progress triage work
+        }
+        result = sync_triage_needed(plan, state)
+        assert result.pruned
+        assert not any(sid in plan["queue_order"] for sid in TRIAGE_STAGE_IDS)
+        assert "item1" in plan["queue_order"]  # other items preserved
+
+    def test_no_prune_during_initial_triage(self):
+        """Stages NOT pruned during initial triage (no prior hash)."""
+        plan = empty_plan()
+        plan["queue_order"] = list(TRIAGE_STAGE_IDS)
+        # No finding_snapshot_hash — this is the initial triage
+        state = _state_empty()
+        result = sync_triage_needed(plan, state)
+        assert not result.pruned
+        assert all(sid in plan["queue_order"] for sid in TRIAGE_STAGE_IDS)
+
+    def test_no_prune_when_triage_in_progress(self):
+        """Stages NOT pruned when user has started triage work."""
+        state = _state_with_review_findings("r1")
+        plan = empty_plan()
+        plan["queue_order"] = list(TRIAGE_STAGE_IDS)
+        plan["epic_triage_meta"] = {
+            "finding_snapshot_hash": "prev_hash",
+            "triaged_ids": ["r1"],
+            "triage_stages": {"observe": {"report": "analysis..."}},
+        }
+        result = sync_triage_needed(plan, state)
+        assert not result.pruned
+        assert all(sid in plan["queue_order"] for sid in TRIAGE_STAGE_IDS)
+
+
+# ---------------------------------------------------------------------------
+# is_triage_stale tests
+# ---------------------------------------------------------------------------
+
+class TestIsTriageStale:
+    def test_not_stale_when_no_findings_and_no_stages(self):
+        plan = empty_plan()
+        state = _state_empty()
+        assert not is_triage_stale(plan, state)
+
+    def test_stale_when_new_findings_exist(self):
+        state = _state_with_review_findings("r1")
+        plan = empty_plan()
+        plan["epic_triage_meta"] = {
+            "finding_snapshot_hash": "prev_hash",
+            "triaged_ids": [],
+        }
+        assert is_triage_stale(plan, state)
+
+    def test_not_stale_when_stages_present_but_no_new_findings(self):
+        """Stages in queue alone should NOT make triage stale if all
+        new findings that triggered injection have been resolved."""
+        state = _state_with_review_findings("r1")
+        plan = empty_plan()
+        plan["queue_order"] = list(TRIAGE_STAGE_IDS)
+        plan["epic_triage_meta"] = {
+            "finding_snapshot_hash": "prev_hash",
+            "triaged_ids": ["r1"],
+            "triage_stages": {},
+        }
+        assert not is_triage_stale(plan, state)
+
+    def test_stale_when_stages_present_with_in_progress_work(self):
+        """Stages in queue ARE stale when user has started triage work."""
+        state = _state_with_review_findings("r1")
+        plan = empty_plan()
+        plan["queue_order"] = list(TRIAGE_STAGE_IDS)
+        plan["epic_triage_meta"] = {
+            "triaged_ids": ["r1"],
+            "triage_stages": {"observe": {"report": "analysis"}},
+        }
+        assert is_triage_stale(plan, state)
+
+    def test_not_stale_when_only_resolutions(self):
+        """Resolving triaged findings should not trigger staleness."""
+        state = _state_with_review_findings("r1")
+        h = review_finding_snapshot_hash(state)
+        # Add r2 to triaged_ids but r2 has been resolved (not in current state)
+        plan = empty_plan()
+        plan["epic_triage_meta"] = {
+            "finding_snapshot_hash": "different_hash",
+            "triaged_ids": ["r1", "r2"],
+        }
+        assert not is_triage_stale(plan, state)
 
 
 # ---------------------------------------------------------------------------

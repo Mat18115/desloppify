@@ -14,6 +14,7 @@ from desloppify.hook_registry import register_lang_hooks
 from desloppify.languages import register_lang
 from desloppify.languages._framework.base.phase_builders import (
     detector_phase_security,
+    detector_phase_signature,
     detector_phase_test_coverage,
     shared_subjective_duplicates_tail,
 )
@@ -176,6 +177,7 @@ class PythonConfig(LangConfig):
                 DetectorPhase("Coupling + cycles + orphaned", phase_coupling),
                 DetectorPhase("Uncalled functions", phase_uncalled_functions),
                 detector_phase_test_coverage(),
+                detector_phase_signature(),
                 DetectorPhase("Code smells", phase_smells),
                 DetectorPhase("Mutable state", phase_mutable_state),
                 detector_phase_security(),

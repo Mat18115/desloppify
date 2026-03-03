@@ -334,8 +334,8 @@ def render_uncommitted_reminder(plan: dict | None) -> None:
             " — `desloppify plan commit-log` to review",
             "dim",
         ))
-    except (ImportError, OSError, ValueError, KeyError, TypeError):
-        pass
+    except (ImportError, OSError, ValueError, KeyError, TypeError) as exc:
+        log(f"  uncommitted reminder skipped: {exc}")
 
 
 def render_single_item_resolution_hint(items: list[dict]) -> None:
@@ -367,7 +367,7 @@ def render_single_item_resolution_hint(items: list[dict]) -> None:
         print(colorize("\n  Resolve with:", "dim"))
 
     print(
-        f'    desloppify plan done "{item["id"]}" --note "<what you did>" --confirm'
+        f'    desloppify plan resolve "{item["id"]}" --note "<what you did>" --confirm'
     )
     print(
         f'    desloppify plan skip --permanent "{item["id"]}" --note "<why>" '
@@ -403,7 +403,7 @@ def render_followup_nudges(
     # Show frozen plan-start score + queue block when in an active cycle
     if queue_total > 0 and plan_start_strict is not None and breakdown is not None:
         frozen = plan_start_strict
-        block = format_queue_block(breakdown, frozen_score=frozen)
+        block = format_queue_block(breakdown, frozen_score=frozen, live_score=strict_score)
         print()
         for text, style in block:
             print(colorize(text, style))
@@ -412,12 +412,13 @@ def render_followup_nudges(
             "dim",
         ))
     elif queue_total > 0 and plan_start_strict is not None:
-        print(
-            colorize(
-                f"\n  Score (frozen at plan start): strict {plan_start_strict:.1f}/100",
-                "cyan",
-            )
-        )
+        from desloppify.app.commands.helpers.queue_progress import format_plan_delta
+        delta_str = format_plan_delta(strict_score, plan_start_strict) if strict_score is not None else ""
+        if delta_str:
+            score_line = f"\n  Score: strict {strict_score:.1f}/100 (plan start: {plan_start_strict:.1f}, {delta_str})"
+        else:
+            score_line = f"\n  Score (frozen at plan start): strict {plan_start_strict:.1f}/100"
+        print(colorize(score_line, "cyan"))
         print(
             colorize(
                 f"  Queue: {queue_total} item{'s' if queue_total != 1 else ''}"

@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 
 from desloppify import state as state_mod
+from desloppify.core.exception_sets import CommandError
 from desloppify.engine.work_queue import ATTEST_EXAMPLE
 from desloppify.core.output_api import colorize
 
@@ -82,10 +83,9 @@ def show_note_length_requirement(note: str | None) -> None:
 
 def _validate_resolve_inputs(args: argparse.Namespace, attestation: str | None) -> None:
     if args.status == "wontfix" and not args.note:
-        _emit_warning(
+        raise CommandError(
             "Wontfix items become technical debt. Add --note to record your reasoning for future review."
         )
-        sys.exit(1)
     if args.status == "open":
         return
     if not validate_attestation(attestation):
@@ -94,7 +94,7 @@ def _validate_resolve_inputs(args: argparse.Namespace, attestation: str | None) 
             attestation,
             ATTEST_EXAMPLE,
         )
-        sys.exit(1)
+        raise CommandError("Manual resolve requires a valid attestation.")
 
 
 def _previous_score_snapshot(state: dict) -> state_mod.ScoreSnapshot:
@@ -158,7 +158,6 @@ def _enforce_batch_wontfix_confirmation(
     _emit_warning(f"Large wontfix batch detected ({preview_count} findings).")
     if strict_delta > 0:
         _emit_warning(f"Estimated strict-score debt added now: {strict_delta:.1f} points.")
-    _emit_warning(
+    raise CommandError(
         "Re-run with --confirm-batch-wontfix if this debt is intentional."
     )
-    sys.exit(1)

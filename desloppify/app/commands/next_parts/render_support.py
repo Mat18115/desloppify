@@ -41,7 +41,7 @@ def subjective_coverage_breakdown(
 
 def is_auto_fix_command(command: str | None) -> bool:
     cmd = (command or "").strip()
-    return cmd.startswith("desloppify fix ") and "--dry-run" in cmd
+    return cmd.startswith("desloppify autofix ") and "--dry-run" in cmd
 
 
 def effort_tag(item: dict) -> str:
@@ -115,7 +115,7 @@ def render_cluster_item(item: dict) -> None:
         print(colorize(f"  Drill in:      desloppify next --cluster {cluster_name} --count 10", "dim"))
         print(
             colorize(
-                f'  Resolve all:   desloppify plan done "{cluster_name}" --note "<what>" --confirm',
+                f'  Resolve all:   desloppify plan resolve "{cluster_name}" --note "<what>" --confirm',
                 "dim",
             )
         )
@@ -123,7 +123,7 @@ def render_cluster_item(item: dict) -> None:
 
     print(
         colorize(
-            f'\n  Resolve all:   desloppify plan done "{cluster_name}" --note "<what>" --confirm',
+            f'\n  Resolve all:   desloppify plan resolve "{cluster_name}" --note "<what>" --confirm',
             "dim",
         )
     )
@@ -140,7 +140,17 @@ def render_gate_banner(gate_phase: str | None, *, item_count: int = 0) -> bool:
 def render_queue_header(queue: dict, explain: bool) -> None:
     del explain
     total = queue.get("total", 0)
-    print(colorize(f"\n  Queue: {total} item{'s' if total != 1 else ''}", "bold"))
+    items = queue.get("items", [])
+    # When the only item is the "run scan" workflow action, show "Queue cleared"
+    # instead of a misleading "1 items" count.
+    if (
+        total == 1
+        and len(items) == 1
+        and items[0].get("id") == "workflow::run-scan"
+    ):
+        print(colorize("\n  Queue cleared (1 workflow step)", "bold"))
+    else:
+        print(colorize(f"\n  Queue: {total} item{'s' if total != 1 else ''}", "bold"))
 
 
 def show_empty_queue(
@@ -154,8 +164,9 @@ def show_empty_queue(
     if queue.get("items"):
         return False
     if plan_start_strict is not None and strict is not None:
-        delta = round(strict - plan_start_strict, 1)
-        delta_str = f" ({'+' if delta > 0 else ''}{delta:.1f})" if abs(delta) >= 0.05 else ""
+        from desloppify.app.commands.helpers.queue_progress import format_plan_delta
+        delta = format_plan_delta(strict, plan_start_strict)
+        delta_str = f" ({delta})" if delta else ""
         print(colorize("\n  Queue cleared!", "green"))
         print(colorize(
             f"  Frozen plan-start: strict {plan_start_strict:.1f} → Live estimate: strict {strict:.1f}{delta_str}",

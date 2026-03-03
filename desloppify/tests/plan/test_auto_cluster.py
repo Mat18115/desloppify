@@ -17,8 +17,8 @@ from desloppify.engine._plan.schema import empty_plan, ensure_plan_defaults
 from desloppify.engine._work_queue.core import (
     QueueBuildOptions,
     build_work_queue,
-    _collapse_clusters,
 )
+from desloppify.engine._work_queue.plan_order import collapse_clusters as _collapse_clusters
 from desloppify.engine._work_queue.ranking import item_sort_key
 
 
@@ -265,7 +265,7 @@ def test_collapse_clusters_replaces_members():
         "cluster_key": "auto::unused",
         "finding_ids": ["u1", "u2"],
         "description": "Remove 2 unused findings",
-        "action": "desloppify fix unused-imports --dry-run",
+        "action": "desloppify autofix unused-imports --dry-run",
         "user_modified": False,
     }
 
@@ -384,10 +384,11 @@ def test_build_work_queue_collapses_clusters():
         options=QueueBuildOptions(
             plan=plan,
             count=10,
-            collapse_clusters=True,
         ),
     )
-    cluster_items = [i for i in result["items"] if i.get("kind") == "cluster"]
+    # Collapse is now a caller responsibility
+    items = _collapse_clusters(result["items"], plan)
+    cluster_items = [i for i in items if i.get("kind") == "cluster"]
     assert len(cluster_items) == 1
     assert cluster_items[0]["member_count"] == 2
 
@@ -496,7 +497,7 @@ def test_narrative_actions_mention_clusters():
     from desloppify.intelligence.narrative.action_engine import _annotate_with_clusters
 
     actions = [
-        {"detector": "unused", "count": 5, "command": "desloppify fix unused-imports --dry-run",
+        {"detector": "unused", "count": 5, "command": "desloppify autofix unused-imports --dry-run",
          "description": "5 unused findings", "type": "auto_fix", "impact": 3.0},
     ]
     clusters = {

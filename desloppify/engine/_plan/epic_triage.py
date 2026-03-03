@@ -256,8 +256,8 @@ Available plan tools (the agent executing your plan has access to these):
 - `desloppify plan focus epic/<name>` — focus the queue on one epic
 - `desloppify plan skip <id> --permanent --note "why" --attest "..."` — permanently dismiss
 - `desloppify plan skip <id> --note "revisit later"` — temporarily defer
-- `desloppify plan done <id> --note "what I did" --attest "..."` — mark resolved
-- `desloppify plan move <id> top|bottom|before|after <target>` — reorder
+- `desloppify plan resolve <id> --note "what I did" --attest "..."` — mark resolved
+- `desloppify plan reorder <id> top|bottom|before|after <target>` — reorder
 - `desloppify plan cluster show <name>` — inspect a cluster
 - `desloppify scan` — re-scan after making changes to verify progress
 - `desloppify show review --status open` — see all open review findings

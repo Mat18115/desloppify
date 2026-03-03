@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
 from desloppify.app.commands.helpers.runtime import command_runtime
 from desloppify.core.config import (
@@ -12,7 +11,7 @@ from desloppify.core.config import (
     set_config_value,
     unset_config_value,
 )
-from desloppify.core.fallbacks import print_error
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
 
 
@@ -61,14 +60,12 @@ def _config_set(args):
     try:
         set_config_value(config, key, value)
     except (KeyError, ValueError) as e:
-        print_error(str(e))
-        sys.exit(1)
+        raise CommandError(str(e)) from e
 
     try:
         save_config(config)
     except OSError as e:
-        print_error(f"could not save config: {e}")
-        sys.exit(1)
+        raise CommandError(f"could not save config: {e}") from e
     display = config[key]
     if isinstance(display, int) and key.endswith("_days") and display == 0:
         display = "never (0)"
@@ -83,13 +80,11 @@ def _config_unset(args):
     try:
         unset_config_value(config, key)
     except KeyError as e:
-        print_error(str(e))
-        sys.exit(1)
+        raise CommandError(str(e)) from e
 
     try:
         save_config(config)
     except OSError as e:
-        print_error(f"could not save config: {e}")
-        sys.exit(1)
+        raise CommandError(f"could not save config: {e}") from e
     default = CONFIG_SCHEMA[key].default
     print(colorize(f"  Reset {key} to default ({default})", "green"))

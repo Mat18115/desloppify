@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import desloppify.app.commands.dev_cmd as dev_mod
+from desloppify.core.exception_sets import CommandError
 
 REQUIRED_SCAFFOLD_PATHS = [
     "__init__.py",
@@ -58,13 +59,13 @@ def test_scaffold_lang_creates_standard_files(tmp_path, monkeypatch):
 
 def test_scaffold_lang_requires_extension(tmp_path, monkeypatch):
     monkeypatch.setattr(dev_mod, "PROJECT_ROOT", tmp_path)
-    with pytest.raises(SystemExit, match="at least one --extension is required"):
+    with pytest.raises(CommandError, match="at least one --extension is required"):
         dev_mod.cmd_dev(_args(extension=[]))
 
 
 def test_scaffold_lang_rejects_invalid_name(tmp_path, monkeypatch):
     monkeypatch.setattr(dev_mod, "PROJECT_ROOT", tmp_path)
-    with pytest.raises(SystemExit, match="language name must match"):
+    with pytest.raises(CommandError, match="language name must match"):
         dev_mod.cmd_dev(_args(name="123ruby"))
 
 
@@ -75,7 +76,7 @@ def test_scaffold_lang_force_overwrites(tmp_path, monkeypatch):
     target = tmp_path / "desloppify" / "languages" / "ruby" / "commands.py"
     target.write_text("SENTINEL\n")
 
-    with pytest.raises(SystemExit, match="Language directory already exists"):
+    with pytest.raises(CommandError, match="Language directory already exists"):
         dev_mod.cmd_dev(_args())
     assert target.read_text() == "SENTINEL\n"
 

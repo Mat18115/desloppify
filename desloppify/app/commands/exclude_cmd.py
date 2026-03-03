@@ -9,8 +9,8 @@ from pathlib import Path
 from desloppify import state as state_mod
 from desloppify.app.commands.helpers.runtime import command_runtime
 from desloppify.core import config as config_mod
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS, CommandError
 from desloppify.core.file_paths import matches_exclusion
-from desloppify.core.fallbacks import print_error
 from desloppify.core.output_api import colorize
 from desloppify.core.tooling import check_config_staleness
 from desloppify.engine.plan import (
@@ -70,8 +70,7 @@ def cmd_exclude(args: argparse.Namespace) -> None:
     try:
         config_mod.save_config(config)
     except OSError as exc:
-        print_error(f"could not save config: {exc}")
-        sys.exit(1)
+        raise CommandError(f"could not save config: {exc}") from exc
 
     removed_ids: list[str] = []
     plan_purged = 0
@@ -81,12 +80,11 @@ def cmd_exclude(args: argparse.Namespace) -> None:
             try:
                 state_mod.save_state(state, state_file)
             except OSError as exc:
-                print_error(f"could not save state: {exc}")
-                sys.exit(1)
+                raise CommandError(f"could not save state: {exc}") from exc
 
             try:
                 plan_purged = _purge_removed_ids_from_plan(state_file, removed_ids)
-            except (OSError, ValueError, TypeError, KeyError):
+            except PLAN_LOAD_EXCEPTIONS:
                 print(
                     colorize("  Warning: could not update living plan.", "yellow"),
                     file=sys.stderr,

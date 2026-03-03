@@ -649,7 +649,7 @@ class TestSecurityRegistry:
 
     def test_dimension_action_type(self):
         """dimension_action_type returns correct labels for known dimensions."""
-        assert dimension_action_type("Code quality") == "fix"
+        assert dimension_action_type("Code quality") == "autofix"
         assert dimension_action_type("File health") == "refactor"
         assert (
             dimension_action_type("Security") == "move"

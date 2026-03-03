@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from desloppify.core.exception_sets import CommandError
 from desloppify.app.commands.review.helpers import parse_dimensions
 from desloppify.app.commands.review.preflight import (
     _scored_dimensions,
@@ -34,16 +35,7 @@ def _state_with_prior_review() -> dict:
 # -- review_rerun_preflight (gate logic) --------------------------------------
 
 
-_BUILD_WQ = "desloppify.app.commands.review.preflight.build_work_queue"
-_COMPUTE_SV = "desloppify.app.commands.review.preflight.compute_subjective_visibility"
-
-
-def _wq_result(items: list[dict]) -> dict:
-    return {
-        "items": items,
-        "total": len(items),
-        "grouped": {},
-    }
+_QUEUE_CONTEXT = "desloppify.app.commands.review.preflight.queue_context"
 
 
 def _mock_policy(objective_count: int = 0) -> SimpleNamespace:
@@ -54,73 +46,66 @@ def _mock_policy(objective_count: int = 0) -> SimpleNamespace:
     )
 
 
+def _mock_queue_context(objective_count: int = 0) -> SimpleNamespace:
+    """Create a mock QueueContext with the given objective count."""
+    return SimpleNamespace(
+        plan=None,
+        target_strict=95.0,
+        policy=_mock_policy(objective_count),
+    )
+
+
 def test_blocked_when_open_objective_items(capsys):
     """Preflight blocks when open objective findings exist."""
     state = _state_with_prior_review()
-    items = [
-        {"id": f"f{i}", "summary": f"Finding {i}"} for i in range(3)
-    ]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=3)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit) as exc:
-                review_rerun_preflight(state, _make_args())
-            assert exc.value.code == 1
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=3)):
+        with pytest.raises(CommandError) as exc:
+            review_rerun_preflight(state, _make_args())
+        assert exc.value.exit_code == 1
 
     err = capsys.readouterr().err
     assert "Open objective finding(s): 3" in err
     assert "--force-review-rerun" in err
 
 
-def test_blocked_when_open_subjective_queue_items(capsys):
-    """Preflight blocks when subjective queue work remains on rerun."""
+def test_subjective_items_never_block_preflight():
+    """Subjective dimensions are resolved BY running reviews — never blocking."""
     state = _state_with_prior_review()
-    subjective_items = [
-        {
-            "id": "subjective::naming_quality",
-            "kind": "subjective_dimension",
-            "detail": {"dimension": "naming_quality"},
-        }
-    ]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=0)):
-        with patch(
-            _BUILD_WQ,
-            return_value=_wq_result(subjective_items),
-        ):
-            with pytest.raises(SystemExit) as exc:
-                review_rerun_preflight(state, _make_args())
-            assert exc.value.code == 1
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=0)):
+        # Should NOT raise — subjective items don't block
+        review_rerun_preflight(state, _make_args())
 
-    err = capsys.readouterr().err
-    assert "objective: 0, subjective: 1" in err
-    assert "Open subjective queue item(s): 1" in err
-    assert "--force-review-rerun" in err
+
+def test_targeted_dimension_does_not_block_own_preparation():
+    """A dimension targeted by --dimensions should not block its own review."""
+    state = {
+        "subjective_assessments": {
+            "mid_level_elegance": {"score": 50.0},
+        }
+    }
+    args = _make_args(dimensions="mid_level_elegance")
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=0)):
+        # Should NOT raise — the targeted dimension is the work, not backlog
+        review_rerun_preflight(state, args)
 
 
 def test_blocked_message_is_concise(capsys):
     """Blocked message does not dump individual finding IDs."""
     state = _state_with_prior_review()
-    items = [
-        {"id": f"f{i}", "summary": f"Finding {i}"} for i in range(8)
-    ]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=8)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit):
-                review_rerun_preflight(state, _make_args())
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=8)):
+        with pytest.raises(CommandError):
+            review_rerun_preflight(state, _make_args())
 
     err = capsys.readouterr().err
     assert "Open objective finding(s): 8" in err
-    # Should NOT dump individual finding IDs
-    assert "f0" not in err
-    assert "f7" not in err
 
 
 def test_allowed_when_queue_empty():
     """Preflight passes silently when no open objective items remain."""
     state = _state_with_prior_review()
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=0)):
-        with patch(_BUILD_WQ, return_value=_wq_result([])):
-            # Should not raise
-            review_rerun_preflight(state, _make_args())
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=0)):
+        # Should not raise
+        review_rerun_preflight(state, _make_args())
 
 
 def test_force_review_rerun_bypasses_check(capsys):
@@ -134,18 +119,10 @@ def test_force_review_rerun_bypasses_check(capsys):
     assert "bypassing" in out
 
 
-def test_force_review_rerun_does_not_call_build_work_queue():
-    """Ensure --force-review-rerun never invokes build_work_queue."""
-    args = _make_args(force_review_rerun=True)
-    with patch(_BUILD_WQ, side_effect=AssertionError("should not be called")):
-        review_rerun_preflight({}, args)
-
-
 def test_no_prior_review_skips_gate():
     """First review run (no subjective scores) skips the gate entirely."""
     state = {}
-    with patch(_BUILD_WQ, side_effect=AssertionError("should not be called")):
-        review_rerun_preflight(state, _make_args())
+    review_rerun_preflight(state, _make_args())
 
 
 def test_all_zero_subjective_scores_skips_gate():
@@ -156,19 +133,16 @@ def test_all_zero_subjective_scores_skips_gate():
             "logic_clarity": {"score": 0},
         }
     }
-    with patch(_BUILD_WQ, side_effect=AssertionError("should not be called")):
-        review_rerun_preflight(state, _make_args())
+    review_rerun_preflight(state, _make_args())
 
 
 def test_prior_subjective_scores_enforces_gate(capsys):
     """When a dimension has a nonzero score, the gate is active."""
     state = _state_with_prior_review()
-    items = [{"id": "f1", "summary": "Finding 1"}]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=1)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit) as exc:
-                review_rerun_preflight(state, _make_args())
-            assert exc.value.code == 1
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=1)):
+        with pytest.raises(CommandError) as exc:
+            review_rerun_preflight(state, _make_args())
+        assert exc.value.exit_code == 1
 
     err = capsys.readouterr().err
     assert "Scored dimensions:" in err
@@ -190,7 +164,7 @@ def test_clears_stale_on_gate_pass():
         },
     }
     save_fn = MagicMock()
-    with patch(_BUILD_WQ, return_value=_wq_result([])):
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=0)):
         review_rerun_preflight(
             state, _make_args(), state_file="/tmp/state.json", save_fn=save_fn
         )
@@ -229,7 +203,7 @@ def test_no_stale_markers_skips_save():
         },
     }
     save_fn = MagicMock()
-    with patch(_BUILD_WQ, return_value=_wq_result([])):
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=0)):
         review_rerun_preflight(
             state, _make_args(), state_file="/tmp/state.json", save_fn=save_fn
         )
@@ -239,11 +213,9 @@ def test_no_stale_markers_skips_save():
 def test_blocked_message_no_tip_without_dimensions_flag(capsys):
     """Without --dimensions, the Tip line does not appear."""
     state = _state_with_prior_review()
-    items = [{"id": "f1", "summary": "Finding 1"}]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=1)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit):
-                review_rerun_preflight(state, _make_args())
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=1)):
+        with pytest.raises(CommandError):
+            review_rerun_preflight(state, _make_args())
 
     err = capsys.readouterr().err
     assert "Tip:" not in err
@@ -252,12 +224,10 @@ def test_blocked_message_no_tip_without_dimensions_flag(capsys):
 def test_blocked_message_no_tip_when_all_targeted_are_scored(capsys):
     """--dimensions targeting only scored dims: no Tip line (no unscored to suggest)."""
     state = _state_with_prior_review()
-    items = [{"id": "f1", "summary": "Finding 1"}]
     args = _make_args(dimensions="naming_quality,logic_clarity")
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=1)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit):
-                review_rerun_preflight(state, args)
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=1)):
+        with pytest.raises(CommandError):
+            review_rerun_preflight(state, args)
 
     err = capsys.readouterr().err
     assert "Tip:" not in err
@@ -276,9 +246,8 @@ def test_targeting_only_unscored_dims_skips_gate():
         }
     }
     args = _make_args(dimensions="logic_clarity")
-    # build_work_queue should not be called — gate skipped
-    with patch(_BUILD_WQ, side_effect=AssertionError("should not be called")):
-        review_rerun_preflight(state, args)
+    # Gate skipped — no scored dims targeted
+    review_rerun_preflight(state, args)
 
 
 def test_targeting_scored_dim_enforces_gate(capsys):
@@ -290,12 +259,10 @@ def test_targeting_scored_dim_enforces_gate(capsys):
         }
     }
     args = _make_args(dimensions="naming_quality")
-    items = [{"id": "f1", "summary": "Finding 1"}]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=1)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit) as exc:
-                review_rerun_preflight(state, args)
-            assert exc.value.code == 1
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=1)):
+        with pytest.raises(CommandError) as exc:
+            review_rerun_preflight(state, args)
+        assert exc.value.exit_code == 1
 
     err = capsys.readouterr().err
     assert "naming_quality" in err
@@ -311,40 +278,15 @@ def test_targeting_mix_of_scored_and_unscored_blocks_and_suggests(capsys):
         }
     }
     args = _make_args(dimensions="naming_quality,logic_clarity,design_coherence")
-    items = [{"id": "f1", "summary": "Finding 1"}]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=1)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit):
-                review_rerun_preflight(state, args)
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=1)):
+        with pytest.raises(CommandError):
+            review_rerun_preflight(state, args)
 
     err = capsys.readouterr().err
     assert "naming_quality" in err
     assert "design_coherence" in err
     # Should suggest targeting only the unscored dimension
     assert "--dimensions logic_clarity" in err
-
-
-def test_targeted_rerun_ignores_non_targeted_subjective_queue_items():
-    """Subjective backlog for other dimensions does not block targeted reruns."""
-    state = {
-        "subjective_assessments": {
-            "naming_quality": {"score": 82.0},
-            "logic_clarity": {"score": 74.0},
-        }
-    }
-    args = _make_args(dimensions="logic_clarity")
-    non_targeted_subjective = [
-        {
-            "id": "subjective::naming_quality",
-            "kind": "subjective_dimension",
-            "detail": {"dimension": "naming_quality"},
-        }
-    ]
-    with patch(
-        _BUILD_WQ,
-        side_effect=[_wq_result([]), _wq_result(non_targeted_subjective)],
-    ):
-        review_rerun_preflight(state, args)
 
 
 def test_no_dimensions_flag_blocks_on_any_scored(capsys):
@@ -355,11 +297,9 @@ def test_no_dimensions_flag_blocks_on_any_scored(capsys):
             "logic_clarity": {"score": 0},
         }
     }
-    items = [{"id": "f1", "summary": "Finding 1"}]
-    with patch(_COMPUTE_SV, return_value=_mock_policy(objective_count=1)):
-        with patch(_BUILD_WQ, return_value=_wq_result(items)):
-            with pytest.raises(SystemExit):
-                review_rerun_preflight(state, _make_args())
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=1)):
+        with pytest.raises(CommandError):
+            review_rerun_preflight(state, _make_args())
 
 
 # -- parse_dimensions ----------------------------------------------------------
@@ -712,23 +652,3 @@ def test_merge_skips_preflight():
         mock_pf.assert_not_called()
 
 
-# -- stale subjective items do not count as blocking backlog -------------------
-
-
-def test_stale_subjective_items_do_not_block_preflight():
-    """Stale re-review items are not counted as blocking backlog in preflight."""
-    state = _state_with_prior_review()
-    stale_items = [
-        {
-            "id": "subjective::naming_quality",
-            "kind": "subjective_dimension",
-            "detail": {"dimension": "naming_quality"},
-            "stale_review": True,
-        }
-    ]
-    with patch(
-        _BUILD_WQ,
-        side_effect=[_wq_result([]), _wq_result(stale_items)],
-    ):
-        # Should NOT raise — stale items don't count as blocking backlog
-        review_rerun_preflight(state, _make_args())

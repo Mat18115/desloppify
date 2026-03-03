@@ -135,7 +135,7 @@ def test_guard_allows_cluster_member(tmp_path, monkeypatch):
                 "cluster_key": "auto::unused",
                 "finding_ids": ["a", "b"],
                 "description": "Fix 2 unused",
-                "action": "desloppify fix unused --dry-run",
+                "action": "desloppify autofix unused --dry-run",
                 "user_modified": False,
             },
         },
@@ -162,7 +162,7 @@ def test_guard_blocks_item_behind_cluster(tmp_path, monkeypatch, capsys):
                 "cluster_key": "auto::unused",
                 "finding_ids": ["a", "b"],
                 "description": "Fix 2 unused",
-                "action": "desloppify fix unused --dry-run",
+                "action": "desloppify autofix unused --dry-run",
                 "user_modified": False,
             },
         },
@@ -195,13 +195,13 @@ def test_guard_empty_queue(tmp_path, monkeypatch):
 
 
 def test_guard_prints_reorganize_commands(tmp_path, monkeypatch, capsys):
-    """Blocked output should show plan move/skip/next commands."""
+    """Blocked output should show plan reorder/skip/next commands."""
     state = _state_with_findings("a", "b")
     _setup_plan(tmp_path, monkeypatch, ["a", "b"])
 
     _check_queue_order_guard(state, ["b"], "fixed")
     captured = capsys.readouterr()
-    assert "plan move" in captured.out
+    assert "plan reorder" in captured.out
     assert "plan skip" in captured.out
     assert "next" in captured.out
 
@@ -247,7 +247,7 @@ def test_guard_cluster_with_stale_members(tmp_path, monkeypatch):
                 "cluster_key": "auto::unused",
                 "finding_ids": ["a", "stale_member"],
                 "description": "Fix 2 unused",
-                "action": "desloppify fix unused --dry-run",
+                "action": "desloppify autofix unused --dry-run",
                 "user_modified": False,
             },
         },

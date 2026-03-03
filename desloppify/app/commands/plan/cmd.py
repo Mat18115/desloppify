@@ -5,10 +5,10 @@ from __future__ import annotations
 import argparse
 
 from desloppify.app.commands.plan.cluster_handlers import cmd_cluster_dispatch
-from desloppify.app.commands.plan.move_handlers import cmd_plan_move
+from desloppify.app.commands.plan.reorder_handlers import cmd_plan_reorder
 from desloppify.app.commands.plan.override_handlers import (
     cmd_plan_describe,
-    cmd_plan_done,
+    cmd_plan_resolve,
     cmd_plan_focus,
     cmd_plan_note,
     cmd_plan_reopen,
@@ -129,17 +129,17 @@ def cmd_plan(args: argparse.Namespace) -> None:
         _cmd_plan_reset(args)
         return
 
-    if plan_action == "move":
-        cmd_plan_move(args)
+    if plan_action == "reorder":
+        cmd_plan_reorder(args)
         return
 
     if plan_action in (
         "describe", "note", "focus",
-        "skip", "unskip", "reopen", "done",
+        "skip", "unskip", "reopen", "resolve",
     ):
         dispatch = {
             "describe": cmd_plan_describe,
-            "done": cmd_plan_done,
+            "resolve": cmd_plan_resolve,
             "note": cmd_plan_note,
             "focus": cmd_plan_focus,
             "skip": cmd_plan_skip,

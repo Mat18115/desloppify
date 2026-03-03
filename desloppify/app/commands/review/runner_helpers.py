@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.path_io_api import safe_write_text
 from .runner_failures import (
     TRANSIENT_RUNNER_PHRASES as _TRANSIENT_RUNNER_PHRASES,
@@ -108,14 +109,7 @@ class BatchResult:
         return payload
 
 
-@dataclass(frozen=True)
-class BatchProgressEvent:
-    """Typed progress event emitted by batch runner execution."""
-
-    batch_index: int
-    event: str
-    code: int | None = None
-    details: dict[str, Any] = field(default_factory=dict)
+from .runner_parallel import BatchProgressEvent  # noqa: F401 (canonical source)
 
 
 def _looks_like_progress_signature_mismatch(exc: TypeError) -> bool:
@@ -1150,14 +1144,14 @@ def print_failures(
     )
 
 
-def print_failures_and_exit(
+def print_failures_and_raise(
     *,
     failures: list[int],
     packet_path: Path,
     logs_dir: Path,
     colorize_fn,
 ) -> None:
-    """Render retry guidance for failed batches and exit non-zero."""
+    """Render retry guidance for failed batches and raise CommandError."""
     if not failures:
         print(colorize_fn("  Failed batches: []", "yellow"), file=sys.stderr)
     _print_failures_report(
@@ -1166,7 +1160,8 @@ def print_failures_and_exit(
         logs_dir=logs_dir,
         colorize_fn=colorize_fn,
     )
-    sys.exit(1)
+    failed_1 = sorted({idx + 1 for idx in failures})
+    raise CommandError(f"batch execution failed: {failed_1}", exit_code=1)
 
 
 __all__ = [
@@ -1181,7 +1176,7 @@ __all__ = [
     "execute_batches",
     "prepare_run_artifacts",
     "print_failures",
-    "print_failures_and_exit",
+    "print_failures_and_raise",
     "run_codex_batch",
     "run_followup_scan",
     "run_stamp",

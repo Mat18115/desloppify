@@ -530,9 +530,8 @@ class TestFixerHelpLines:
         mock_get_lang.return_value = mock_lang
 
         lines = parser_admin_mod._fixer_help_lines(["python"])
-        assert len(lines) == 2  # one lang line + "special: review" line
+        assert len(lines) == 1  # one lang line
         assert "logs, unused" in lines[0]
-        assert "special: review" in lines[1]
 
     @patch("desloppify.app.cli_support.parser_groups_admin.get_lang")
     def test_fixer_help_lines_import_error(self, mock_get_lang):
@@ -540,7 +539,6 @@ class TestFixerHelpLines:
 
         lines = parser_admin_mod._fixer_help_lines(["bogus"])
         assert "none yet" in lines[0]
-        assert "special: review" in lines[1]
 
 
 class TestFixParser:
@@ -554,7 +552,7 @@ class TestFixParser:
             parser_admin_mod._add_fix_parser(sub, ["python"])
 
         args = parser.parse_args(
-            ["fix", "unused", "--path", "src", "--dry-run"]
+            ["autofix", "unused", "--path", "src", "--dry-run"]
         )
         assert args.fixer == "unused"
         assert args.path == "src"

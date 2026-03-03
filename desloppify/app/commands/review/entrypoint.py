@@ -7,7 +7,7 @@ import sys
 
 from desloppify.app.commands.helpers.lang import resolve_lang
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.core.output_api import colorize
+from desloppify.core.exception_sets import CommandError
 
 from .batch import _do_run_batches, do_import_run
 from .external import do_external_start, do_external_submit
@@ -30,14 +30,10 @@ def _enable_live_review_output() -> None:
             _ = exc
 
 
-def _require_lang_or_exit(lang) -> None:
+def _require_lang(lang) -> None:
     if lang:
         return
-    print(
-        colorize("  Error: could not detect language. Use --lang.", "red"),
-        file=sys.stderr,
-    )
-    sys.exit(1)
+    raise CommandError("Error: could not detect language. Use --lang.", exit_code=1)
 
 
 def _mode_flags(args: argparse.Namespace) -> tuple[list[bool], object, object]:
@@ -61,42 +57,30 @@ def _mode_flags(args: argparse.Namespace) -> tuple[list[bool], object, object]:
     return flags, import_file, validate_import_file
 
 
-def _validate_mode_selection_or_exit(
+def _validate_mode_selection(
     args: argparse.Namespace,
     *,
     mode_flags: list[bool],
     import_file: object,
 ) -> None:
     if sum(1 for enabled in mode_flags if enabled) > 1:
-        print(
-            colorize(
-                "  Error: choose one review mode per command "
-                "(--merge | --run-batches | --import-run | --external-start | --external-submit | --import | --validate-import).",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Error: choose one review mode per command "
+            "(--merge | --run-batches | --import-run | --external-start | --external-submit | --import | --validate-import).",
+            exit_code=1,
         )
-        sys.exit(1)
 
     external_submit = bool(getattr(args, "external_submit", False))
     if external_submit and not import_file:
-        print(
-            colorize(
-                "  Error: --external-submit requires --import FILE.",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Error: --external-submit requires --import FILE.",
+            exit_code=2,
         )
-        sys.exit(2)
     if external_submit and not getattr(args, "session_id", None):
-        print(
-            colorize(
-                "  Error: --external-submit requires --session-id.",
-                "red",
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            "Error: --external-submit requires --session-id.",
+            exit_code=2,
         )
-        sys.exit(2)
 
 
 def _run_review_mode(
@@ -193,10 +177,10 @@ def cmd_review(args: argparse.Namespace) -> None:
     state_file = runtime.state_path
     state = runtime.state
     lang = resolve_lang(args)
-    _require_lang_or_exit(lang)
+    _require_lang(lang)
 
     mode_flags, import_file, validate_import_file = _mode_flags(args)
-    _validate_mode_selection_or_exit(
+    _validate_mode_selection(
         args,
         mode_flags=mode_flags,
         import_file=import_file,

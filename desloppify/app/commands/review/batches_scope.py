@@ -5,8 +5,10 @@ from __future__ import annotations
 import shlex
 import sys
 
+from desloppify.core.exception_sets import CommandError
 from desloppify.intelligence.review.dimensions.data import load_dimensions_for_lang
 from desloppify.intelligence.review.feedback_contract import (
+    LEGACY_REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY,
     REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY,
     TRUSTED_IMPORT_COVERAGE_OVERRIDE_FLAG,
 )
@@ -16,13 +18,9 @@ def validate_runner(runner: str, *, colorize_fn) -> None:
     """Validate review batch runner."""
     if runner == "codex":
         return
-    print(
-        colorize_fn(
-            f"  Error: unsupported runner '{runner}' (supported: codex)", "red"
-        ),
-        file=sys.stderr,
+    raise CommandError(
+        f"Error: unsupported runner '{runner}' (supported: codex)", exit_code=2
     )
-    sys.exit(2)
 
 
 def require_batches(
@@ -35,10 +33,6 @@ def require_batches(
     batches = packet.get("investigation_batches", [])
     if isinstance(batches, list) and batches:
         return batches
-    print(
-        colorize_fn("  Error: packet has no investigation_batches.", "red"),
-        file=sys.stderr,
-    )
     if isinstance(suggested_prepare_cmd, str) and suggested_prepare_cmd.strip():
         print(
             colorize_fn(
@@ -54,7 +48,7 @@ def require_batches(
         ),
         file=sys.stderr,
     )
-    sys.exit(1)
+    raise CommandError("Error: packet has no investigation_batches.", exit_code=1)
 
 
 def print_review_quality(quality: object, *, colorize_fn) -> None:
@@ -66,6 +60,10 @@ def print_review_quality(quality: object, *, colorize_fn) -> None:
     high_missing_issue_note = quality.get(
         REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY
     )
+    if not isinstance(high_missing_issue_note, int | float):
+        high_missing_issue_note = quality.get(
+            LEGACY_REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY
+        )
     finding_pressure = quality.get("finding_pressure")
     dims_with_findings = quality.get("dimensions_with_findings")
     if not isinstance(coverage, int | float) or not isinstance(density, int | float):
@@ -273,13 +271,6 @@ def enforce_trusted_import_coverage_gate(
     preview = ", ".join(missing_dims[:5])
     if len(missing_dims) > 5:
         preview = f"{preview}, +{len(missing_dims) - 5} more"
-    print(
-        colorize_fn(
-            "  Error: trusted assessment import blocked due to incomplete selected-dimension coverage.",
-            "red",
-        ),
-        file=sys.stderr,
-    )
     print(colorize_fn(f"  Missing dimensions: {preview}", "yellow"), file=sys.stderr)
     print(
         colorize_fn(
@@ -297,7 +288,10 @@ def enforce_trusted_import_coverage_gate(
         ),
         file=sys.stderr,
     )
-    raise SystemExit(1)
+    raise CommandError(
+        "Error: trusted assessment import blocked due to incomplete selected-dimension coverage.",
+        exit_code=1,
+    )
 
 
 __all__ = [

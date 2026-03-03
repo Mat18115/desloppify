@@ -9,6 +9,7 @@ from desloppify.app.commands.helpers.runtime import command_runtime
 from desloppify.app.commands.helpers.state import require_completed_scan
 from desloppify.core.output_api import colorize, print_table
 from desloppify.engine.plan import compute_new_finding_ids, load_plan
+from desloppify.engine._work_queue.plan_order import collapse_clusters
 from desloppify.engine.work_queue import QueueBuildOptions, build_work_queue
 
 
@@ -18,25 +19,11 @@ def _truncate(text: str, width: int) -> str:
     return text[: width - 1] + "\u2026"
 
 
-def _resolve_plan_context(plan: dict, cluster_filter: str | None) -> tuple[dict | None, str | None]:
-    plan_data: dict | None = None
-    if plan.get("queue_order") or plan.get("overrides") or plan.get("clusters"):
-        plan_data = plan
-
-    effective_cluster = cluster_filter
-    if plan_data and not cluster_filter:
-        active_cluster = plan_data.get("active_cluster")
-        if active_cluster:
-            effective_cluster = active_cluster
-    return plan_data, effective_cluster
-
-
 def _print_queue_header(
     *,
     items: list[dict],
     include_skipped: bool,
     plan: dict,
-    plan_data: dict | None,
     new_count: int = 0,
 ) -> None:
     from desloppify.app.commands.helpers.queue_progress import (
@@ -47,7 +34,7 @@ def _print_queue_header(
     total = len(items)
     skipped_count = sum(1 for it in items if it.get("plan_skipped"))
     non_skipped = total - skipped_count
-    plan_skipped_total = len(plan.get("skipped", {})) if plan_data else 0
+    plan_skipped_total = len(plan.get("skipped", {}))
 
     # Count subjective items in the visible list
     subjective = sum(
@@ -55,11 +42,9 @@ def _print_queue_header(
     )
 
     # Count plan-ordered items (minus skipped)
-    plan_ordered = 0
-    if plan_data:
-        queue_order = plan_data.get("queue_order", [])
-        skipped_ids = set(plan_data.get("skipped", {}).keys())
-        plan_ordered = sum(1 for fid in queue_order if fid not in skipped_ids)
+    queue_order = plan.get("queue_order", [])
+    skipped_ids = set(plan.get("skipped", {}).keys())
+    plan_ordered = sum(1 for fid in queue_order if fid not in skipped_ids)
 
     breakdown = QueueBreakdown(
         queue_total=non_skipped,
@@ -71,7 +56,7 @@ def _print_queue_header(
     new_suffix = f"  ({new_count} new this scan)" if new_count > 0 else ""
     print(colorize(f"\n  {headline}{new_suffix}", "bold"))
 
-    focus = plan.get("active_cluster") if plan_data else None
+    focus = plan.get("active_cluster")
     if focus:
         print(colorize(f"  Focus: {focus}", "cyan"))
 
@@ -151,22 +136,28 @@ def cmd_plan_queue(args: argparse.Namespace) -> None:
 
     plan = load_plan()
     print_triage_guardrail_info(plan=plan, state=state)
-    plan_data, effective_cluster = _resolve_plan_context(plan, cluster_filter)
+
+    effective_cluster = cluster_filter
+    if not cluster_filter:
+        active_cluster = plan.get("active_cluster")
+        if active_cluster:
+            effective_cluster = active_cluster
 
     queue = build_work_queue(
         state,
         options=QueueBuildOptions(
             count=None,
-            scan_path=state.get("scan_path"),
             status="open",
             include_subjective=True,
-            plan=plan_data,
+            plan=plan,
             include_skipped=include_skipped,
             cluster=effective_cluster,
-            collapse_clusters=True,
         ),
     )
     items = queue.get("items", [])
+    # Collapse auto-clusters into display meta-items
+    if plan and not effective_cluster and not plan.get("active_cluster"):
+        items = collapse_clusters(items, plan)
 
     sort_by = getattr(args, "sort", "priority")
     all_new_ids: set[str] = queue.get("new_ids", set())
@@ -183,7 +174,6 @@ def cmd_plan_queue(args: argparse.Namespace) -> None:
         items=items,
         include_skipped=include_skipped,
         plan=plan,
-        plan_data=plan_data,
         new_count=len(new_ids),
     )
 

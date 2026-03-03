@@ -12,6 +12,7 @@ import desloppify.engine._state.merge_findings as merge_findings
 import desloppify.engine._state.merge_history as merge_history
 import desloppify.engine._work_queue.helpers as work_queue_helpers
 import desloppify.engine._work_queue.ranking as work_queue_ranking
+import desloppify.engine._work_queue.synthetic as work_queue_synthetic
 import desloppify.intelligence.review.prepare_batches as review_prepare_batches
 
 
@@ -35,8 +36,8 @@ def test_split_module_direct_coverage_smoke_signals():
     assert callable(merge_history._append_scan_history)
     assert callable(merge_history._build_merge_diff)
 
-    assert callable(work_queue_helpers.build_subjective_items)
-    assert callable(work_queue_helpers._subjective_dimension_aliases)
+    assert callable(work_queue_synthetic.build_subjective_items)
+    assert callable(work_queue_synthetic._subjective_dimension_aliases)
     assert callable(work_queue_ranking.item_sort_key)
     assert callable(work_queue_ranking.group_queue_items)
 

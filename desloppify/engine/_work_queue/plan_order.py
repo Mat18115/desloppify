@@ -20,28 +20,13 @@ def new_item_ids(state: StateModel) -> set[str]:
     }
 
 
-def apply_plan_order(
-    items: list[dict],
-    plan: dict,
-    *,
-    include_skipped: bool = False,
-    cluster: str | None = None,
-    new_ids: set[str] | None = None,
-) -> list[dict]:
-    """Reorder items according to the living plan."""
-    queue_order: list[str] = plan.get("queue_order", [])
-    skipped_map: dict = plan.get("skipped", {})
-    skipped_ids: set[str] = set(skipped_map.keys())
+def enrich_plan_metadata(items: list[dict], plan: dict) -> None:
+    """Stamp plan description, note, and cluster info from overrides."""
     overrides: dict = plan.get("overrides", {})
     clusters: dict = plan.get("clusters", {})
-    active_cluster = plan.get("active_cluster")
 
-    by_id: dict[str, dict] = {}
     for item in items:
-        by_id[item["id"]] = item
-
-    for item_id, item in by_id.items():
-        override = overrides.get(item_id, {})
+        override = overrides.get(item["id"], {})
         if override.get("description"):
             item["plan_description"] = override["description"]
         if override.get("note"):
@@ -55,52 +40,76 @@ def apply_plan_order(
                 "total_items": len(cluster_data.get("finding_ids", [])),
             }
 
-    ordered: list[dict] = []
-    ordered_ids: set[str] = set()
-    for finding_id in queue_order:
-        if finding_id in by_id and finding_id not in skipped_ids:
-            ordered.append(by_id[finding_id])
-            ordered_ids.add(finding_id)
 
-    skipped_items: list[dict] = []
-    remaining_existing: list[dict] = []
-    remaining_new: list[dict] = []
-    _new = new_ids or set()
+def stamp_plan_sort_keys(
+    items: list[dict],
+    plan: dict,
+    new_ids: set[str],
+) -> None:
+    """Stamp ``_plan_position`` and ``_is_new`` on each item.
+
+    These fields are consumed by :func:`item_sort_key` in ``ranking.py``
+    to produce the correct final ordering in a single sort pass.
+    """
+    queue_order: list[str] = plan.get("queue_order", [])
+    skipped_ids: set[str] = set(plan.get("skipped", {}).keys())
+
+    position_map: dict[str, int] = {}
+    for idx, finding_id in enumerate(queue_order):
+        if finding_id not in skipped_ids:
+            position_map[finding_id] = idx
+
     for item in items:
         item_id = item["id"]
-        if item_id in ordered_ids:
-            continue
-        if item_id in skipped_ids:
-            skipped_items.append(item)
-        elif item_id in _new:
-            remaining_new.append(item)
+        pos = position_map.get(item_id)
+        item["_plan_position"] = pos  # None if not in queue_order
+        item["_is_new"] = item_id in new_ids
+
+
+def separate_skipped(
+    items: list[dict],
+    plan: dict,
+) -> tuple[list[dict], list[dict]]:
+    """Separate skipped items from the main list.
+
+    Returns ``(non_skipped, skipped)`` so callers can optionally re-append.
+    """
+    skipped_ids: set[str] = set(plan.get("skipped", {}).keys())
+    if not skipped_ids:
+        return items, []
+    non_skipped: list[dict] = []
+    skipped: list[dict] = []
+    for item in items:
+        if item["id"] in skipped_ids:
+            skipped.append(item)
         else:
-            remaining_existing.append(item)
+            non_skipped.append(item)
+    return non_skipped, skipped
 
-    result = ordered + remaining_existing + remaining_new
 
-    # Triage stage IDs can appear in queue_order, so plan ordering may
-    # scramble their dependency order.  Re-sort just the stage items
-    # in-place to restore unblocked-before-blocked invariant.
-    stage_entries = [
-        (i, item) for i, item in enumerate(result)
-        if item.get("kind") == "workflow_stage"
-    ]
-    if len(stage_entries) > 1:
-        sorted_stages = sorted(
-            [item for _, item in stage_entries],
-            key=lambda it: (
-                1 if it.get("is_blocked") else 0,
-                int(it.get("stage_index", 0)),
-            ),
-        )
-        for (idx, _), replacement in zip(stage_entries, sorted_stages):
-            result[idx] = replacement
+def filter_cluster_focus(
+    items: list[dict],
+    plan: dict,
+    cluster: str | None,
+) -> list[dict]:
+    """Filter to only cluster members when a cluster focus is active."""
+    effective_cluster = cluster or plan.get("active_cluster")
+    if not effective_cluster:
+        return items
+    clusters: dict = plan.get("clusters", {})
+    cluster_data = clusters.get(effective_cluster, {})
+    cluster_member_ids = set(cluster_data.get("finding_ids", []))
+    if not cluster_member_ids:
+        return items
+    return [item for item in items if item["id"] in cluster_member_ids]
 
-    if include_skipped:
-        result = result + skipped_items
 
-    for position, item in enumerate(result):
+def stamp_positions(items: list[dict], plan: dict) -> None:
+    """Stamp queue_position and plan_skipped metadata on each item."""
+    skipped_map: dict = plan.get("skipped", {})
+    skipped_ids: set[str] = set(skipped_map.keys())
+
+    for position, item in enumerate(items):
         item["queue_position"] = position + 1
         if item["id"] in skipped_ids:
             item["plan_skipped"] = True
@@ -110,14 +119,6 @@ def apply_plan_order(
                 skip_reason = skip_entry.get("reason")
                 if skip_reason:
                     item["plan_skip_reason"] = skip_reason
-
-    effective_cluster = cluster or active_cluster
-    if effective_cluster:
-        cluster_data = clusters.get(effective_cluster, {})
-        cluster_member_ids = set(cluster_data.get("finding_ids", []))
-        if cluster_member_ids:
-            result = [item for item in result if item["id"] in cluster_member_ids]
-    return result
 
 
 def action_type_for_detector(detector: str) -> str:
@@ -139,13 +140,13 @@ def _build_cluster_meta(
     """Build a cluster meta-item from its member items."""
     detector = members[0].get("detector", "") if members else ""
     action = cluster_data.get("action") or ""
-    if "desloppify fix" in action:
+    if "desloppify autofix" in action:
         action_type = "auto_fix"
     elif "desloppify move" in action:
         action_type = "reorganize"
     else:
         action_type = action_type_for_detector(detector)
-        if action_type == "auto_fix" and "desloppify fix" not in action:
+        if action_type == "auto_fix" and "desloppify autofix" not in action:
             action_type = "refactor"
 
     stored_desc = cluster_data.get("description") or ""
@@ -235,7 +236,11 @@ def collapse_clusters(items: list[dict], plan: dict) -> list[dict]:
 
 
 __all__ = [
-    "apply_plan_order",
     "collapse_clusters",
+    "enrich_plan_metadata",
+    "filter_cluster_focus",
     "new_item_ids",
+    "separate_skipped",
+    "stamp_plan_sort_keys",
+    "stamp_positions",
 ]

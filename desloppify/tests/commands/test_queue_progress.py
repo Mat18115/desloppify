@@ -79,7 +79,8 @@ def test_get_plan_start_strict_returns_none_when_no_scores():
 
 
 def test_plan_aware_queue_count_delegates_to_build_work_queue():
-    mock_result = {"total": 5, "items": []}
+    mock_items = [{"id": f"f{i}", "kind": "finding"} for i in range(5)]
+    mock_result = {"total": 5, "items": mock_items}
     with patch(
         "desloppify.engine.work_queue.build_work_queue",
         return_value=mock_result,
@@ -99,9 +100,20 @@ def test_queue_breakdown_defaults():
     assert b.skipped == 0
     assert b.subjective == 0
     assert b.workflow == 0
+    assert b.actionable == 0
     assert b.focus_cluster is None
     assert b.focus_cluster_count == 0
     assert b.focus_cluster_total == 0
+
+
+def test_queue_breakdown_actionable_excludes_workflow():
+    b = QueueBreakdown(queue_total=5, workflow=2)
+    assert b.actionable == 3
+
+
+def test_queue_breakdown_actionable_floors_at_zero():
+    b = QueueBreakdown(queue_total=1, workflow=1)
+    assert b.actionable == 0
 
 
 def test_queue_breakdown_frozen():
@@ -233,12 +245,14 @@ def test_block_with_frozen_score():
 
 
 def test_plan_aware_queue_breakdown_basic():
+    # Items list must match total since collapse is now caller-side
+    mock_items = (
+        [{"id": f"f{i}", "kind": "finding"} for i in range(49)]
+        + [{"id": "s1", "kind": "subjective_dimension"}]
+    )
     mock_result = {
         "total": 50,
-        "items": [
-            {"kind": "finding"},
-            {"kind": "subjective_dimension"},
-        ],
+        "items": mock_items,
     }
     plan = {
         "queue_order": ["a", "b", "c"],
@@ -256,9 +270,10 @@ def test_plan_aware_queue_breakdown_basic():
 
 
 def test_plan_aware_queue_breakdown_no_plan():
+    mock_items = [{"id": f"f{i}", "kind": "finding"} for i in range(30)]
     mock_result = {
         "total": 30,
-        "items": [],
+        "items": mock_items,
     }
     with patch(
         "desloppify.engine.work_queue.build_work_queue",

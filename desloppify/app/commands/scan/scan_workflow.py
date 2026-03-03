@@ -188,9 +188,10 @@ def _clear_plan_start_scores_if_queue_empty(
         return False
 
     try:
-        from desloppify.app.commands.helpers.queue_progress import plan_aware_queue_count
+        from desloppify.app.commands.helpers.queue_progress import plan_aware_queue_breakdown
 
-        queue_empty = plan_aware_queue_count(state, plan) == 0
+        breakdown = plan_aware_queue_breakdown(state, plan)
+        queue_empty = breakdown.actionable == 0
     except PLAN_LOAD_EXCEPTIONS as exc:
         logging.debug("Plan operation skipped: %s", exc)
         return False
@@ -222,7 +223,11 @@ def _reconcile_plan_post_scan(runtime: "ScanRuntime") -> None:
 
         # Compute subjective visibility policy once for consistent gating
         from desloppify.engine.plan import compute_subjective_visibility
-        _policy = compute_subjective_visibility(runtime.state, target_strict=_target_strict)
+        _policy = compute_subjective_visibility(
+            runtime.state,
+            target_strict=_target_strict,
+            plan=plan,
+        )
 
         # Detect cycle completion: plan_start_scores is empty when the
         # previous cycle drained the queue and revealed scores.  In that

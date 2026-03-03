@@ -180,7 +180,6 @@ def _plan_item_sections(findings: dict, *, state: PlanState | None = None) -> li
     """Build per-file sections from the shared work-queue backend."""
 
     queue_state: PlanState | dict = state or {"findings": findings}
-    scan_path = state.get("scan_path") if state else None
     raw_target = (
         (state or {}).get("config", {}).get("target_strict_score", 95)
         if isinstance(state, dict)
@@ -198,7 +197,6 @@ def _plan_item_sections(findings: dict, *, state: PlanState | None = None) -> li
         queue_state,
         options=QueueBuildOptions(
             count=None,
-            scan_path=scan_path,
             status="open",
             include_subjective=True,
             subjective_threshold=subjective_threshold,
@@ -285,7 +283,6 @@ def generate_plan_md(state: PlanState, plan: dict | None = None) -> str:
             state,
             options=QueueBuildOptions(
                 count=None,
-                scan_path=state.get("scan_path"),
                 status="open",
                 include_subjective=True,
             ),

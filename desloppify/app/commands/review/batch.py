@@ -12,8 +12,7 @@ from . import batch_core as batch_core_mod
 from . import batches as review_batches_mod
 from . import runner_helpers as runner_helpers_mod
 from desloppify.core.coercions_api import coerce_positive_int
-from desloppify.core.text_api import get_project_root
-from desloppify.core.fallbacks import print_error
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.discovery_api import safe_write_text
 from desloppify.intelligence import narrative as narrative_mod
 from desloppify.intelligence import review as review_mod
@@ -26,11 +25,13 @@ from .helpers import parse_dimensions
 from .import_cmd import do_import as _do_import
 from .packet_policy import coerce_review_batch_file_limit, redacted_review_config
 from .runtime import setup_lang_concrete as _setup_lang
+from .runtime_paths import (
+    blind_packet_path as _blind_packet_path,
+    review_packet_dir as _review_packet_dir,
+    runtime_project_root as _runtime_project_root,
+    subagent_runs_dir as _subagent_runs_dir,
+)
 
-# Backward-compatible override hooks for tests.
-PROJECT_ROOT: Path | None = None
-REVIEW_PACKET_DIR: Path | None = None
-SUBAGENT_RUNS_DIR: Path | None = None
 FOLLOWUP_SCAN_TIMEOUT_SECONDS = 45 * 60
 ABSTRACTION_SUB_AXES = (
     "abstraction_leverage",
@@ -49,27 +50,6 @@ ABSTRACTION_COMPONENT_NAMES = {
     "type_discipline": "Type Discipline",
 }
 
-
-def _runtime_project_root() -> Path:
-    if isinstance(PROJECT_ROOT, Path):
-        return PROJECT_ROOT
-    return get_project_root()
-
-
-def _review_packet_dir() -> Path:
-    if isinstance(REVIEW_PACKET_DIR, Path):
-        return REVIEW_PACKET_DIR
-    return _runtime_project_root() / ".desloppify" / "review_packets"
-
-
-def _subagent_runs_dir() -> Path:
-    if isinstance(SUBAGENT_RUNS_DIR, Path):
-        return SUBAGENT_RUNS_DIR
-    return _runtime_project_root() / ".desloppify" / "subagents" / "runs"
-
-
-def _blind_packet_path() -> Path:
-    return _runtime_project_root() / ".desloppify" / "review_packet_blind.json"
 
 
 def _merge_batch_results(batch_results: list[object]) -> dict[str, object]:
@@ -103,13 +83,11 @@ def _load_or_prepare_packet(
     if packet_override:
         packet_path = Path(packet_override)
         if not packet_path.exists():
-            print_error(f"packet not found: {packet_override}")
-            sys.exit(1)
+            raise CommandError(f"packet not found: {packet_override}", exit_code=1)
         try:
             packet = json.loads(packet_path.read_text())
         except (OSError, json.JSONDecodeError) as exc:
-            print_error(f"reading packet: {exc}")
-            sys.exit(1)
+            raise CommandError(f"reading packet: {exc}", exit_code=1) from exc
         blind_path = _blind_packet_path()
         blind_packet = runner_helpers_mod.build_blind_packet(packet)
         safe_write_text(blind_path, json.dumps(blind_packet, indent=2) + "\n")
@@ -261,7 +239,7 @@ def _do_run_batches(args, state, lang, state_file, config: dict | None = None) -
         execute_batches_fn=runner_helpers_mod.execute_batches,
         collect_batch_results_fn=_collect_batch_results,
         print_failures_fn=runner_helpers_mod.print_failures,
-        print_failures_and_exit_fn=runner_helpers_mod.print_failures_and_exit,
+        print_failures_and_raise_fn=runner_helpers_mod.print_failures_and_raise,
         merge_batch_results_fn=_merge_batch_results,
         build_import_provenance_fn=runner_helpers_mod.build_batch_import_provenance,
         do_import_fn=_do_import,
@@ -287,38 +265,32 @@ def _do_run_batches(args, state, lang, state_file, config: dict | None = None) -
 def _validate_run_dir(run_dir: Path) -> tuple[dict, Path, str]:
     """Validate run directory, load summary, and return (summary, blind_packet_path, immutable_packet_path).
 
-    Exits with error message on any validation failure.
+    Raises CommandError on any validation failure.
     """
     if not run_dir.is_dir():
-        print(colorize(f"  Error: run directory not found: {run_dir}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"run directory not found: {run_dir}", exit_code=1)
 
     summary_path = run_dir / "run_summary.json"
     if not summary_path.exists():
-        print(colorize(f"  Error: no run_summary.json in {run_dir}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"no run_summary.json in {run_dir}", exit_code=1)
     try:
         summary = json.loads(summary_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        print(colorize(f"  Error reading run summary: {exc}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"Error reading run summary: {exc}", exit_code=1) from exc
 
     successful = summary.get("successful_batches", [])
     blind_packet_path = Path(str(summary.get("blind_packet", "")))
     immutable_packet_path = str(summary.get("immutable_packet", ""))
 
     if not successful:
-        print(colorize("  Error: no successful batches in run summary.", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError("no successful batches in run summary.", exit_code=1)
     if not blind_packet_path.exists():
-        print(colorize(f"  Error: blind packet not found: {blind_packet_path}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"blind packet not found: {blind_packet_path}", exit_code=1)
 
     try:
         packet = json.loads(Path(immutable_packet_path).read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        print(colorize(f"  Error reading immutable packet: {exc}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"Error reading immutable packet: {exc}", exit_code=1) from exc
 
     summary["_packet"] = packet
     return summary, blind_packet_path, immutable_packet_path
@@ -360,8 +332,7 @@ def do_import_run(
 
     missing = [idx + 1 for idx in selected_indexes if not output_files[idx].exists()]
     if missing:
-        print(colorize(f"  Error: missing result files for batches: {missing}", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError(f"missing result files for batches: {missing}", exit_code=1)
 
     batch_results, failures = runner_helpers_mod.collect_batch_results(
         selected_indexes=selected_indexes,
@@ -378,8 +349,7 @@ def do_import_run(
     )
 
     if not batch_results:
-        print(colorize("  Error: no valid batch results could be parsed.", "red"), file=sys.stderr)
-        sys.exit(1)
+        raise CommandError("no valid batch results could be parsed.", exit_code=1)
 
     print(colorize(f"  Parsed {len(batch_results)} batch results from {run_dir}", "bold"))
     if failures:

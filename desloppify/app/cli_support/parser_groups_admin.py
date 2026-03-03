@@ -439,13 +439,12 @@ def _fixer_help_lines(langs: list[str]) -> list[str]:
             fixer_names = []
         fixer_list = ", ".join(fixer_names) if fixer_names else "none yet"
         fixer_help_lines.append(f"fixers ({lang_name}): {fixer_list}")
-    fixer_help_lines.append("special: review — prepare structured review data")
     return fixer_help_lines
 
 
 def _add_fix_parser(sub, langs: list[str]) -> None:
     p_fix = sub.add_parser(
-        "fix",
+        "autofix",
         help="Auto-fix mechanical issues",
         epilog="\n".join(_fixer_help_lines(langs)),
     )
@@ -475,9 +474,9 @@ typical workflow:
   desloppify plan cluster create ...    # group related findings
   desloppify plan focus <cluster>       # narrow scope
   desloppify next                       # work on the next item
-  desloppify plan done <id> --attest .. # mark as fixed
+  desloppify plan resolve <id> --attest .. # mark as fixed
 
-patterns (used by move, skip, done, describe, note, etc.):
+patterns (used by reorder, skip, resolve, describe, note, etc.):
   Patterns match findings by detector, file, ID prefix, glob, or name.
   Cluster names also work as patterns — they expand to all member IDs.
   Examples: "security", "src/foo.py", "unused::*React*", "my-cluster"
@@ -486,8 +485,8 @@ subcommands:
   show       Show plan metadata summary
   queue      Compact table of upcoming queue items
   reset      Reset plan to empty
-  move       Move findings or clusters in the queue
-  done       Mark findings as fixed (score movement + next-step)
+  reorder    Reposition findings or clusters in the queue
+  resolve    Mark findings as fixed (score movement + next-step)
   describe   Set augmented description
   note       Set note on findings
   skip       Skip findings (temporary/permanent/false_positive)
@@ -521,23 +520,23 @@ subcommands:
     # plan reset
     plan_sub.add_parser("reset", help="Reset plan to empty")
 
-    # plan move <patterns> <position> [--target TARGET]
+    # plan reorder <patterns> <position> [--target TARGET]
     p_move = plan_sub.add_parser(
-        "move",
-        help="Move findings in the queue",
+        "reorder",
+        help="Reposition findings in the queue",
         epilog="""\
 patterns accept finding IDs, detector names, file paths, globs, or cluster names.
 cluster names expand to all member IDs automatically.
 
 examples:
-  desloppify plan move security top                         # all findings from detector
-  desloppify plan move "unused::src/foo.ts::*" top          # glob pattern
-  desloppify plan move smells bottom                        # deprioritize
-  desloppify plan move my-cluster top                       # cluster members
-  desloppify plan move my-cluster unused top                # mix clusters + findings
-  desloppify plan move unused before -t security            # before a finding/cluster
-  desloppify plan move smells after -t my-cluster           # after a cluster
-  desloppify plan move security up -t 3                     # shift up 3 positions""",
+  desloppify plan reorder security top                         # all findings from detector
+  desloppify plan reorder "unused::src/foo.ts::*" top          # glob pattern
+  desloppify plan reorder smells bottom                        # deprioritize
+  desloppify plan reorder my-cluster top                       # cluster members
+  desloppify plan reorder my-cluster unused top                # mix clusters + findings
+  desloppify plan reorder unused before -t security            # before a finding/cluster
+  desloppify plan reorder smells after -t my-cluster           # after a cluster
+  desloppify plan reorder security up -t 3                     # shift up 3 positions""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_move.add_argument(
@@ -615,15 +614,15 @@ examples:
         help="Finding ID(s), detector, file path, glob, or cluster name",
     )
 
-    # plan done <patterns> --attest [--note]
+    # plan resolve <patterns> --attest [--note]
     p_done = plan_sub.add_parser(
-        "done",
+        "resolve",
         help="Mark findings as fixed (shows score movement + next step)",
         epilog="""\
 examples:
-  desloppify plan done "unused::src/foo.tsx::React" \\
+  desloppify plan resolve "unused::src/foo.tsx::React" \\
     --attest "I have actually removed the import and I am not gaming the score."
-  desloppify plan done security --note "patched XSS" \\
+  desloppify plan resolve security --note "patched XSS" \\
     --attest "I have actually ..."  """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -690,8 +689,8 @@ examples:
     p_cd = cluster_sub.add_parser("delete", help="Delete a cluster")
     p_cd.add_argument("cluster_name", type=str, help="Cluster name")
 
-    # plan cluster move <cluster[,cluster…]> <position> [target]
-    p_cm = cluster_sub.add_parser("move", help="Move cluster(s) as a block")
+    # plan cluster reorder <cluster[,cluster…]> <position> [target]
+    p_cm = cluster_sub.add_parser("reorder", help="Reorder cluster(s) as a block")
     p_cm.add_argument("cluster_names", type=str, help="Cluster name(s), comma-separated for multiple")
     p_cm.add_argument(
         "position", choices=["top", "bottom", "before", "after", "up", "down"],

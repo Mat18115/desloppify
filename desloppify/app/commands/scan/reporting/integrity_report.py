@@ -5,9 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from desloppify import state as state_mod
-from ..scan_reporting_analysis import (
-    _coverage_reduction_warnings as _analysis_coverage_reduction_warnings,
-)
 from desloppify.engine.plan import has_living_plan, load_plan
 from desloppify.intelligence import narrative as narrative_mod
 from desloppify.core.output import colorize
@@ -33,7 +30,32 @@ def _current_scan_coverage(state: dict[str, Any], lang) -> dict[str, Any]:
 
 
 def _coverage_reduction_warnings(state: dict[str, Any], lang) -> list[str]:
-    return _analysis_coverage_reduction_warnings(state, lang)
+    coverage = _current_scan_coverage(state, lang)
+    detectors = coverage.get("detectors", {})
+    if not isinstance(detectors, dict):
+        return []
+
+    warnings: list[str] = []
+    for detector, payload in detectors.items():
+        if not isinstance(payload, dict):
+            continue
+        status = str(payload.get("status", "full")).strip().lower()
+        confidence = _coerce_coverage_confidence(payload.get("confidence"), default=1.0)
+        if status != "reduced" and confidence >= 1.0:
+            continue
+
+        summary = str(payload.get("summary", "")).strip()
+        impact = str(payload.get("impact", "")).strip()
+        remediation = str(payload.get("remediation", "")).strip()
+        detector_label = str(detector).strip() or "detector"
+
+        line = f"Coverage reduced ({detector_label}): {summary or 'reduced detector confidence.'}"
+        if impact:
+            line += f" Repercussion: {impact}"
+        if remediation:
+            line += f" Fix: {remediation}"
+        warnings.append(line)
+    return warnings
 
 
 def _post_scan_warnings(diff: dict[str, Any], state: dict[str, Any], lang) -> list[str]:

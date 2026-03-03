@@ -11,7 +11,7 @@ from desloppify.app.cli_support.parser_groups import (
     _add_dev_parser,
     _add_exclude_parser,
     _add_fix_parser,
-    _add_ignore_parser,
+    _add_suppress_parser,
     _add_langs_parser,
     _add_move_parser,
     _add_next_parser,
@@ -27,28 +27,28 @@ from desloppify.app.cli_support.parser_groups import (
 )
 
 USAGE_EXAMPLES = """
-core workflow:
+workflow:
   scan       Run detectors, update state, show diff
   status     Score dashboard with dimension health
   next       Show next highest-priority item to work on
-  plan       Living plan: prioritize, cluster, skip, done, annotate
+  plan       Living plan: prioritize, cluster, resolve, skip, annotate
 
-investigation:
+investigate:
   show       Dig into findings by file/dir/detector/ID
   tree       Annotated codebase tree (zoom with --focus)
+  viz        Interactive HTML treemap
   detect     Run a single detector directly (bypass state)
 
-maintenance:
-  fix        Auto-fix mechanical issues
-  ignore     Suppress findings matching a pattern
+improve:
+  autofix    Auto-fix mechanical issues
+  suppress   Suppress findings matching a pattern
   exclude    Exclude path pattern from scanning
   move       Move file/dir and update import references
   review     Holistic subjective review (LLM-based)
 
-setup & admin:
+configure:
   zone       Show/set zone classifications
   config     Project configuration
-  viz        Interactive HTML treemap
   langs      List language plugins
   dev        Developer utilities
   update-skill  Install/update agent skill document
@@ -60,7 +60,7 @@ examples:
   desloppify plan queue                  # compact table of all items
   desloppify next --count 10             # top 10 queue items
   desloppify show src/components/Modal.tsx
-  desloppify plan done "unused::src/foo.tsx::React" \\
+  desloppify plan resolve "unused::src/foo.tsx::React" \\
     --note "removed import" --attest "I have actually ..."
   desloppify review --run-batches --parallel --scan-after-import
 """
@@ -116,23 +116,27 @@ def create_parser(*, langs: list[str], detector_names: list[str]) -> argparse.Ar
         required=True,
         parser_class=_NoAbbrevArgumentParser,
     )
+    # workflow
     _add_scan_parser(sub)
     _add_status_parser(sub)
-    _add_tree_parser(sub)
-    _add_show_parser(sub)
     _add_next_parser(sub)
-    _add_ignore_parser(sub)
-    _add_exclude_parser(sub)
-    _add_fix_parser(sub, langs)
     _add_plan_parser(sub)
+    # investigate
+    _add_show_parser(sub)
+    _add_tree_parser(sub)
     _add_viz_parser(sub)
     _add_detect_parser(sub, detector_names)
+    # improve
+    _add_fix_parser(sub, langs)
+    _add_suppress_parser(sub)
+    _add_exclude_parser(sub)
     _add_move_parser(sub)
     _add_review_parser(sub)
+    # configure
     _add_zone_parser(sub)
     _add_config_parser(sub)
-    _add_dev_parser(sub)
     _add_langs_parser(sub)
+    _add_dev_parser(sub)
     _add_update_skill_parser(sub)
     return parser
 

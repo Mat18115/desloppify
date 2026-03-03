@@ -6,11 +6,11 @@ import argparse
 import ast
 import keyword
 import re
-import sys
 
 from desloppify.app.commands.dev_scaffold_templates import build_scaffold_files
 from desloppify.core.text_api import PROJECT_ROOT
 from desloppify.core.discovery_api import safe_write_text
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
 
 
@@ -21,13 +21,9 @@ def cmd_dev(args: argparse.Namespace) -> None:
         try:
             _cmd_scaffold_lang(args)
         except ValueError as ex:
-            raise SystemExit(colorize(str(ex), "red")) from ex
+            raise CommandError(str(ex)) from ex
         return
-    print(
-        colorize("Unknown dev action. Use `desloppify dev scaffold-lang`.", "red"),
-        file=sys.stderr,
-    )
-    sys.exit(1)
+    raise CommandError("Unknown dev action. Use `desloppify dev scaffold-lang`.")
 
 
 def _normalize_lang_name(raw: str) -> str:
@@ -145,11 +141,8 @@ def _cmd_scaffold_lang(args) -> None:
 
     lang_dir = PROJECT_ROOT / "desloppify" / "languages" / lang_name
     if lang_dir.exists() and not force:
-        raise SystemExit(
-            colorize(
-                f"Language directory already exists: {lang_dir}. Use --force to overwrite.",
-                "red",
-            )
+        raise CommandError(
+            f"Language directory already exists: {lang_dir}. Use --force to overwrite."
         )
 
     files = _template_files(lang_name, extensions, markers, default_src)

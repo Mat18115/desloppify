@@ -14,6 +14,7 @@ from desloppify.app.commands.helpers.runtime_options import (
     resolve_lang_runtime_options,
 )
 from desloppify.languages import runtime as lang_runtime
+from desloppify.core.exception_sets import CommandError
 from desloppify.core.output_api import colorize
 
 
@@ -45,23 +46,18 @@ def cmd_detect(args: argparse.Namespace) -> None:
 
     if not lang_cfg:
         langs = ", ".join(lang_api.available_langs()) or "registered language plugins"
-        print(
-            colorize(
-                f"No language specified. Use --lang <name> (available: {langs}).", "red"
-            ),
-            file=sys.stderr,
+        raise CommandError(
+            f"No language specified. Use --lang <name> (available: {langs})."
         )
-        sys.exit(1)
 
     # Validate detector name
     detector = _resolve_detector_key(detector_input, lang_cfg.detect_commands)
     if detector is None:
-        print(
-            colorize(f"Unknown detector for {lang_cfg.name}: {detector_input}", "red"),
-            file=sys.stderr,
+        available = ", ".join(sorted(lang_cfg.detect_commands))
+        raise CommandError(
+            f"Unknown detector for {lang_cfg.name}: {detector_input}\n"
+            f"  Available: {available}"
         )
-        print(f"  Available: {', '.join(sorted(lang_cfg.detect_commands))}", file=sys.stderr)
-        sys.exit(1)
 
     # Set default thresholds for detectors that expect them
     if getattr(args, "threshold", None) is None:
@@ -76,7 +72,7 @@ def cmd_detect(args: argparse.Namespace) -> None:
         lang_options = resolve_lang_runtime_options(args, lang_cfg)
     except LangRuntimeOptionsError as exc:
         print_lang_runtime_options_error(exc, lang_name=lang_cfg.name)
-        sys.exit(2)
+        raise CommandError(str(exc), exit_code=2) from exc
     lang = lang_runtime.make_lang_run(
         lang_cfg,
         overrides=lang_runtime.LangRunOverrides(

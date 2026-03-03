@@ -4,335 +4,33 @@ from __future__ import annotations
 
 import json
 import math
-import shlex
 import sys
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 
-from desloppify.intelligence.review.feedback_contract import (
-    LEGACY_REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY,
-    REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY,
+from desloppify.core.exception_sets import CommandError
+from .batches_runtime import (
+    BatchRunSummaryConfig,
+    build_batch_tasks,
+    make_run_log_writer,
+    resolve_run_log_path,
+    write_run_summary as _write_run_summary_impl,
 )
-from desloppify.intelligence.review.dimensions.data import load_dimensions_for_lang
+from .batches_scope import (
+    collect_reviewed_files_from_batches,
+    normalize_dimension_list,
+    print_import_dimension_coverage_notice,
+    print_preflight_dimension_scope_notice,
+    print_review_quality,
+    require_batches,
+    scored_dimensions_for_lang,
+    validate_runner,
+)
 from .runtime.policy import resolve_batch_run_policy
 
 
-def _validate_runner(runner: str, *, colorize_fn) -> None:
-    """Validate review batch runner."""
-    if runner == "codex":
-        return
-    print(
-        colorize_fn(
-            f"  Error: unsupported runner '{runner}' (supported: codex)", "red"
-        ),
-        file=sys.stderr,
-    )
-    sys.exit(2)
-
-
-def _require_batches(
-    packet: dict,
-    *,
-    colorize_fn,
-    suggested_prepare_cmd: str | None = None,
-) -> list[dict]:
-    """Return investigation batches or exit with a clear error."""
-    batches = packet.get("investigation_batches", [])
-    if isinstance(batches, list) and batches:
-        return batches
-    print(
-        colorize_fn("  Error: packet has no investigation_batches.", "red"),
-        file=sys.stderr,
-    )
-    if isinstance(suggested_prepare_cmd, str) and suggested_prepare_cmd.strip():
-        print(
-            colorize_fn(
-                f"  Regenerate review context first: `{suggested_prepare_cmd}`",
-                "yellow",
-            ),
-            file=sys.stderr,
-        )
-    print(
-        colorize_fn(
-            "  Happy path: `desloppify review --run-batches --runner codex --parallel --scan-after-import`.",
-            "dim",
-        ),
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
-def _print_review_quality(quality: object, *, colorize_fn) -> None:
-    """Render merged review quality summary when present."""
-    if not isinstance(quality, dict):
-        return
-    coverage = quality.get("dimension_coverage")
-    density = quality.get("evidence_density")
-    high_missing_issue_note = quality.get(
-        REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY
-    )
-    if not isinstance(high_missing_issue_note, int | float):
-        high_missing_issue_note = quality.get(
-            LEGACY_REVIEW_QUALITY_HIGH_SCORE_MISSING_ISSUES_KEY
-        )
-    finding_pressure = quality.get("finding_pressure")
-    dims_with_findings = quality.get("dimensions_with_findings")
-    if not isinstance(coverage, int | float) or not isinstance(density, int | float):
-        return
-
-    pressure_segment = ""
-    if isinstance(finding_pressure, int | float) and isinstance(dims_with_findings, int):
-        pressure_segment = (
-            f", finding-pressure {float(finding_pressure):.2f} "
-            f"across {dims_with_findings} dims"
-        )
-    print(
-        colorize_fn(
-            "  Review quality: "
-            f"dimension coverage {float(coverage):.2f}, "
-            f"evidence density {float(density):.2f}, "
-            f"high-score-missing-issue-note {int(high_missing_issue_note or 0)}"
-            f"{pressure_segment}",
-            "dim",
-        )
-    )
-
-
-def _collect_reviewed_files_from_batches(
-    *,
-    batches: list[dict[str, object]],
-    selected_indexes: list[int],
-) -> list[str]:
-    """Collect normalized file paths reviewed in the selected batch set."""
-    reviewed: list[str] = []
-    seen: set[str] = set()
-    for idx in selected_indexes:
-        if idx < 0 or idx >= len(batches):
-            continue
-        batch = batches[idx]
-        files = batch.get("files_to_read", [])
-        if not isinstance(files, list):
-            continue
-        for raw in files:
-            if not isinstance(raw, str):
-                continue
-            path = raw.strip().strip(",'\"")
-            if not path or path in {".", ".."}:
-                continue
-            if path.endswith("/"):
-                continue
-            if path in seen:
-                continue
-            seen.add(path)
-            reviewed.append(path)
-    return reviewed
-
-
-def _normalize_dimension_list(raw: object) -> list[str]:
-    """Normalize dimension collections to a stable, de-duplicated list."""
-    if not isinstance(raw, list):
-        return []
-    out: list[str] = []
-    seen: set[str] = set()
-    for item in raw:
-        if not isinstance(item, str):
-            continue
-        dim = item.strip()
-        if not dim or dim in seen:
-            continue
-        seen.add(dim)
-        out.append(dim)
-    return out
-
-
-def _scored_dimensions_for_lang(lang_name: str) -> list[str]:
-    """Return default scored subjective dimensions for one language."""
-    try:
-        default_dims, _, _ = load_dimensions_for_lang(lang_name)
-    except (ValueError, RuntimeError):
-        return []
-    return _normalize_dimension_list(default_dims)
-
-
-def _missing_scored_dimensions(
-    *,
-    selected_dims: list[str],
-    scored_dims: list[str],
-) -> list[str]:
-    selected = set(selected_dims)
-    return [dim for dim in scored_dims if dim not in selected]
-
-
-def _missing_dimensions_command(*, missing_dims: list[str], scan_path: str) -> str:
-    """Return rerun command for missing subjective dimensions."""
-    base = "desloppify review --run-batches --runner codex --parallel --scan-after-import"
-    if scan_path and scan_path != ".":
-        base += f" --path {shlex.quote(scan_path)}"
-    if missing_dims:
-        base += f" --dimensions {','.join(missing_dims)}"
-    return base
-
-
-def _print_preflight_dimension_scope_notice(
-    *,
-    selected_dims: list[str],
-    scored_dims: list[str],
-    explicit_selection: bool,
-    scan_path: str,
-    colorize_fn,
-) -> None:
-    """Print trigger-time notice when run scope is a scored-dimension subset."""
-    if not scored_dims:
-        return
-    missing_dims = _missing_scored_dimensions(
-        selected_dims=selected_dims,
-        scored_dims=scored_dims,
-    )
-    if not missing_dims:
-        return
-
-    covered_count = len([dim for dim in selected_dims if dim in set(scored_dims)])
-    scope_reason = (
-        "explicit --dimensions selection"
-        if explicit_selection
-        else "language default review dimension set"
-    )
-    tone = "yellow" if explicit_selection else "red"
-    print(
-        colorize_fn(
-            "  WARNING: this run targets "
-            f"{covered_count}/{len(scored_dims)} scored subjective dimensions "
-            f"({scope_reason}).",
-            tone,
-        )
-    )
-    preview = ", ".join(missing_dims[:5])
-    if len(missing_dims) > 5:
-        preview = f"{preview}, +{len(missing_dims) - 5} more"
-    print(colorize_fn(f"  Missing from this run: {preview}", "yellow"))
-    print(
-        colorize_fn(
-            "  Rerun missing dimensions: "
-            f"`{_missing_dimensions_command(missing_dims=missing_dims, scan_path=scan_path)}`",
-            "dim",
-        )
-    )
-
-
-def _print_import_dimension_coverage_notice(
-    *,
-    assessed_dims: list[str],
-    scored_dims: list[str],
-    scan_path: str,
-    colorize_fn,
-) -> list[str]:
-    """Print result-time notice when merged import covers only a subset."""
-    if not scored_dims:
-        return []
-    missing_dims = _missing_scored_dimensions(
-        selected_dims=assessed_dims,
-        scored_dims=scored_dims,
-    )
-    if not missing_dims:
-        return []
-
-    covered_count = len([dim for dim in assessed_dims if dim in set(scored_dims)])
-    print(
-        colorize_fn(
-            "  Coverage gap: imported assessments for "
-            f"{covered_count}/{len(scored_dims)} scored subjective dimensions.",
-            "yellow",
-        )
-    )
-    preview = ", ".join(missing_dims[:5])
-    if len(missing_dims) > 5:
-        preview = f"{preview}, +{len(missing_dims) - 5} more"
-    print(colorize_fn(f"  Still missing: {preview}", "yellow"))
-    print(
-        colorize_fn(
-            "  Run to cover missing dimensions: "
-            f"`{_missing_dimensions_command(missing_dims=missing_dims, scan_path=scan_path)}`",
-            "dim",
-        )
-    )
-    return missing_dims
-
-
-def _append_run_log_line(run_log_path: Path, message: str) -> None:
-    """Append one timestamped line to the run log (best effort)."""
-    line = f"{datetime.now(UTC).isoformat(timespec='seconds')} {message}\n"
-    try:
-        with run_log_path.open("a", encoding="utf-8") as handle:
-            handle.write(line)
-    except OSError:
-        return
-
-
-def _run_batch_prompt(
-    *,
-    prompt: str,
-    output_file: Path,
-    log_file: Path,
-    project_root: Path,
-    run_codex_batch_fn,
-) -> int:
-    """Execute one batch prompt via the injected runner function."""
-    return run_codex_batch_fn(
-        prompt=prompt,
-        repo_root=project_root,
-        output_file=output_file,
-        log_file=log_file,
-    )
-
-
-def _run_batch_task(
-    *,
-    batch_index: int,
-    prompt_path: Path,
-    output_path: Path,
-    log_path: Path,
-    project_root: Path,
-    run_codex_batch_fn,
-) -> int:
-    """Read one prompt artifact and execute its runner task."""
-    try:
-        prompt = prompt_path.read_text()
-    except OSError as exc:
-        raise RuntimeError(
-            f"unable to read prompt for batch #{batch_index + 1}: {prompt_path}"
-        ) from exc
-    return _run_batch_prompt(
-        prompt=prompt,
-        output_file=output_path,
-        log_file=log_path,
-        project_root=project_root,
-        run_codex_batch_fn=run_codex_batch_fn,
-    )
-
-
-def _build_batch_tasks(
-    *,
-    selected_indexes: list[int],
-    prompt_files: dict[int, Path],
-    output_files: dict[int, Path],
-    log_files: dict[int, Path],
-    project_root: Path,
-    run_codex_batch_fn,
-) -> dict[int, object]:
-    """Build index→callable task map for execute_batches."""
-    tasks: dict[int, object] = {}
-    for batch_index in selected_indexes:
-        tasks[batch_index] = partial(
-            _run_batch_task,
-            batch_index=batch_index,
-            prompt_path=prompt_files[batch_index],
-            output_path=output_files[batch_index],
-            log_path=log_files[batch_index],
-            project_root=project_root,
-            run_codex_batch_fn=run_codex_batch_fn,
-        )
-    return tasks
+_build_batch_tasks = build_batch_tasks
 
 
 def _record_execution_issue(append_run_log_fn, batch_index: int, exc: Exception) -> None:
@@ -342,68 +40,6 @@ def _record_execution_issue(append_run_log_fn, batch_index: int, exc: Exception)
         return
     append_run_log_fn(f"execution-error batch={batch_index + 1} error={exc}")
 
-
-def _write_run_summary(
-    *,
-    run_summary_path: Path,
-    summary_created_at: str,
-    stamp: str,
-    runner: str,
-    run_parallel: bool,
-    selected_indexes: list[int],
-    successful_batches: list[int],
-    failed_batches: list[int],
-    allow_partial: bool,
-    max_parallel_batches: int,
-    batch_timeout_seconds: int,
-    batch_max_retries: int,
-    batch_retry_backoff_seconds: float,
-    heartbeat_seconds: float,
-    stall_warning_seconds: int,
-    stall_kill_seconds: int,
-    immutable_packet_path: Path,
-    prompt_packet_path: Path,
-    run_dir: Path,
-    logs_dir: Path,
-    run_log_path: Path,
-    batch_status: dict[str, dict[str, object]],
-    safe_write_text_fn,
-    colorize_fn,
-    append_run_log_fn,
-    interrupted: bool = False,
-    interruption_reason: str | None = None,
-) -> None:
-    """Write run_summary.json and emit a trace line to run.log."""
-    run_summary: dict[str, object] = {
-        "created_at": summary_created_at,
-        "run_stamp": stamp,
-        "runner": runner,
-        "parallel": run_parallel,
-        "selected_batches": [idx + 1 for idx in selected_indexes],
-        "successful_batches": successful_batches,
-        "failed_batches": failed_batches,
-        "allow_partial": allow_partial,
-        "max_parallel_batches": max_parallel_batches if run_parallel else 1,
-        "batch_timeout_seconds": batch_timeout_seconds,
-        "batch_max_retries": batch_max_retries,
-        "batch_retry_backoff_seconds": batch_retry_backoff_seconds,
-        "batch_heartbeat_seconds": heartbeat_seconds if run_parallel else None,
-        "batch_stall_warning_seconds": stall_warning_seconds if run_parallel else None,
-        "batch_stall_kill_seconds": stall_kill_seconds,
-        "immutable_packet": str(immutable_packet_path),
-        "blind_packet": str(prompt_packet_path),
-        "run_dir": str(run_dir),
-        "logs_dir": str(logs_dir),
-        "run_log": str(run_log_path),
-        "batches": batch_status,
-    }
-    if interrupted:
-        run_summary["interrupted"] = True
-        if interruption_reason:
-            run_summary["interruption_reason"] = interruption_reason
-    safe_write_text_fn(run_summary_path, json.dumps(run_summary, indent=2) + "\n")
-    print(colorize_fn(f"  Run summary: {run_summary_path}", "dim"))
-    append_run_log_fn(f"run-summary {run_summary_path}")
 
 
 def do_run_batches(
@@ -421,7 +57,7 @@ def do_run_batches(
     execute_batches_fn,
     collect_batch_results_fn,
     print_failures_fn,
-    print_failures_and_exit_fn,
+    print_failures_and_raise_fn,
     merge_batch_results_fn,
     build_import_provenance_fn,
     do_import_fn,
@@ -434,7 +70,7 @@ def do_run_batches(
     """Run holistic investigation batches with a local subagent runner."""
     config = config or {}
     runner = getattr(args, "runner", "codex")
-    _validate_runner(runner, colorize_fn=colorize_fn)
+    validate_runner(runner, colorize_fn=colorize_fn)
     allow_partial = bool(getattr(args, "allow_partial", False))
     policy = resolve_batch_run_policy(args)
     run_parallel = policy.run_parallel
@@ -456,9 +92,9 @@ def do_run_batches(
     )
 
     scan_path = str(getattr(args, "path", ".") or ".")
-    packet_dimensions = _normalize_dimension_list(packet.get("dimensions", []))
-    scored_dimensions = _scored_dimensions_for_lang(lang.name)
-    _print_preflight_dimension_scope_notice(
+    packet_dimensions = normalize_dimension_list(packet.get("dimensions", []))
+    scored_dimensions = scored_dimensions_for_lang(lang.name)
+    print_preflight_dimension_scope_notice(
         selected_dims=packet_dimensions,
         scored_dims=scored_dimensions,
         explicit_selection=bool(getattr(args, "dimensions", None)),
@@ -466,7 +102,7 @@ def do_run_batches(
         colorize_fn=colorize_fn,
     )
     suggested_prepare_cmd = f"desloppify review --prepare --path {scan_path}"
-    batches = _require_batches(
+    batches = require_batches(
         packet,
         colorize_fn=colorize_fn,
         suggested_prepare_cmd=suggested_prepare_cmd,
@@ -495,19 +131,12 @@ def do_run_batches(
         run_root=subagent_runs_dir,
         repo_root=project_root,
     )
-    raw_run_log_file = getattr(args, "run_log_file", None)
-    run_log_file_value = (
-        raw_run_log_file.strip()
-        if isinstance(raw_run_log_file, str) and raw_run_log_file.strip()
-        else None
+    run_log_path = resolve_run_log_path(
+        getattr(args, "run_log_file", None),
+        project_root=project_root,
+        run_dir=run_dir,
     )
-    if run_log_file_value is not None:
-        candidate = Path(run_log_file_value).expanduser()
-        run_log_path = candidate if candidate.is_absolute() else project_root / candidate
-    else:
-        run_log_path = run_dir / "run.log"
-    run_log_path.parent.mkdir(parents=True, exist_ok=True)
-    append_run_log = partial(_append_run_log_line, run_log_path)
+    append_run_log = make_run_log_writer(run_log_path)
 
     append_run_log(
         "run-start "
@@ -690,11 +319,9 @@ def do_run_batches(
 
     record_execution_issue = partial(_record_execution_issue, append_run_log)
     run_summary_path = run_dir / "run_summary.json"
-    write_run_summary = partial(
-        _write_run_summary,
-        run_summary_path=run_summary_path,
-        summary_created_at=summary_created_at,
-        stamp=stamp,
+    summary_config = BatchRunSummaryConfig(
+        created_at=summary_created_at,
+        run_stamp=stamp,
         runner=runner,
         run_parallel=run_parallel,
         selected_indexes=selected_indexes,
@@ -711,11 +338,21 @@ def do_run_batches(
         run_dir=run_dir,
         logs_dir=logs_dir,
         run_log_path=run_log_path,
-        batch_status=batch_status,
-        safe_write_text_fn=safe_write_text_fn,
-        colorize_fn=colorize_fn,
-        append_run_log_fn=append_run_log,
     )
+
+    def write_run_summary(*, successful_batches, failed_batches, interrupted=False, interruption_reason=None):
+        _write_run_summary_impl(
+            summary_path=run_summary_path,
+            summary_config=summary_config,
+            batch_status=batch_status,
+            successful_batches=successful_batches,
+            failed_batches=failed_batches,
+            safe_write_text_fn=safe_write_text_fn,
+            colorize_fn=colorize_fn,
+            append_run_log_fn=append_run_log,
+            interrupted=interrupted,
+            interruption_reason=interruption_reason,
+        )
 
     try:
         execution_failures = execute_batches_fn(
@@ -783,7 +420,7 @@ def do_run_batches(
         append_run_log(
             f"run-finished failures={[idx + 1 for idx in sorted(failure_set)]} mode=exit"
         )
-        print_failures_and_exit_fn(
+        print_failures_and_raise_fn(
             failures=failures,
             packet_path=immutable_packet_path,
             logs_dir=logs_dir,
@@ -809,7 +446,7 @@ def do_run_batches(
         )
 
     merged = merge_batch_results_fn(batch_results)
-    reviewed_files = _collect_reviewed_files_from_batches(
+    reviewed_files = collect_reviewed_files_from_batches(
         batches=batches,
         selected_indexes=successful_indexes,
     )
@@ -843,21 +480,21 @@ def do_run_batches(
         run_stamp=stamp,
         batch_indexes=successful_indexes,
     )
-    merged_assessment_dims = _normalize_dimension_list(
+    merged_assessment_dims = normalize_dimension_list(
         list((merged.get("assessments") or {}).keys())
     )
-    merged_finding_dims = _normalize_dimension_list(
+    merged_finding_dims = normalize_dimension_list(
         [
             finding.get("dimension")
             for finding in (merged.get("findings") or [])
             if isinstance(finding, dict)
         ]
     )
-    merged_imported_dims = _normalize_dimension_list(
+    merged_imported_dims = normalize_dimension_list(
         merged_assessment_dims + merged_finding_dims
     )
     review_scope["imported_dimensions"] = merged_imported_dims
-    missing_after_import = _print_import_dimension_coverage_notice(
+    missing_after_import = print_import_dimension_coverage_notice(
         assessed_dims=merged_assessment_dims,
         scored_dims=scored_dimensions,
         scan_path=scan_path,
@@ -872,7 +509,7 @@ def do_run_batches(
     merged_path = run_dir / "holistic_findings_merged.json"
     safe_write_text_fn(merged_path, json.dumps(merged, indent=2) + "\n")
     print(colorize_fn(f"\n  Merged outputs: {merged_path}", "bold"))
-    _print_review_quality(merged.get("review_quality", {}), colorize_fn=colorize_fn)
+    print_review_quality(merged.get("review_quality", {}), colorize_fn=colorize_fn)
 
     try:
         do_import_fn(
@@ -903,14 +540,10 @@ def do_run_batches(
             scan_path=str(args.path),
         )
         if followup_code != 0:
-            print(
-                colorize_fn(
-                    f"  Follow-up scan failed with exit code {followup_code}.",
-                    "red",
-                ),
-                file=sys.stderr,
+            raise CommandError(
+                f"Error: follow-up scan failed with exit code {followup_code}.",
+                exit_code=followup_code,
             )
-            raise SystemExit(followup_code)
 
 
 __all__ = ["do_run_batches"]

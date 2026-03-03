@@ -10,7 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
-from desloppify.app.commands.review.batches import _require_batches
+from desloppify.core.exception_sets import CommandError
+from desloppify.app.commands.review.batches_scope import require_batches
 from desloppify.app.commands.review.import_helpers import (
     ImportPayloadLoadError,
     assessment_mode_label,
@@ -653,19 +654,17 @@ def _do_prepare_patched(*, total_files: int = 3, state: dict | None = None, conf
 
 def test_review_prepare_zero_files_exits_with_error(capsys):
     """Regression guard for issue #127: 0-file result must error, not silently succeed."""
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(CommandError) as exc:
         _do_prepare_patched(total_files=0)
-    assert exc.value.code == 1
-    err = capsys.readouterr().err
-    assert "no files found" in err.lower()
+    assert exc.value.exit_code == 1
+    assert "no files found" in exc.value.message.lower()
 
 
 def test_review_prepare_zero_files_hints_scan_path(capsys):
     """When state has a scan_path, the error hint mentions it."""
-    with pytest.raises(SystemExit):
+    with pytest.raises(CommandError) as exc:
         _do_prepare_patched(total_files=0, state={"scan_path": "."})
-    err = capsys.readouterr().err
-    assert "--path" in err
+    assert "--path" in exc.value.message
 
 
 def test_review_prepare_query_redacts_target_score():
@@ -682,14 +681,14 @@ def test_review_prepare_query_redacts_target_score():
 
 
 def test_require_batches_guides_rebuild_when_packet_has_no_batches(capsys):
-    with pytest.raises(SystemExit) as exc:
-        _require_batches(
+    with pytest.raises(CommandError) as exc:
+        require_batches(
             {"investigation_batches": []},
             colorize_fn=_colorize,
             suggested_prepare_cmd="desloppify review --prepare --path src",
         )
-    assert exc.value.code == 1
+    assert exc.value.exit_code == 1
     err = capsys.readouterr().err
-    assert "no investigation_batches" in err
+    assert "no investigation_batches" in exc.value.message
     assert "Regenerate review context first" in err
     assert "review --run-batches --runner codex --parallel --scan-after-import" in err

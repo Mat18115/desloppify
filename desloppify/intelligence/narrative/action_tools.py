@@ -46,7 +46,7 @@ def _build_fixers(
                     "name": fixer,
                     "detector": detector,
                     "open_count": count,
-                    "command": f"desloppify fix {fixer} --dry-run",
+                    "command": f"desloppify autofix {fixer} --dry-run",
                 }
             )
 

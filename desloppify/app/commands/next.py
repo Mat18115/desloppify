@@ -25,6 +25,7 @@ from desloppify.engine.plan import load_plan
 from desloppify.engine.work_queue import (
     QueueBuildOptions,
     build_work_queue,
+    queue_context,
 )
 from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_api import colorize
@@ -151,10 +152,12 @@ def _plan_queue_context(
     *,
     state: dict,
     plan_data: dict | None,
+    context=None,
 ) -> tuple[float | None, QueueBreakdown | None]:
-    plan_start_strict = get_plan_start_strict(plan_data)
+    effective_plan = context.plan if context is not None else plan_data
+    plan_start_strict = get_plan_start_strict(effective_plan)
     try:
-        breakdown = plan_aware_queue_breakdown(state, plan_data)
+        breakdown = plan_aware_queue_breakdown(state, plan_data, context=context)
     except PLAN_LOAD_EXCEPTIONS:
         breakdown = None
     return plan_start_strict, breakdown
@@ -188,6 +191,12 @@ def _get_items(args, state: dict, config: dict) -> None:
     ):
         plan_data = plan
 
+    # Build unified context once — all downstream consumers agree on
+    # plan, target_strict, and subjective visibility policy.
+    ctx = queue_context(
+        state, config=config, plan=plan_data, target_strict=target_strict,
+    )
+
     # Auto-scope to focus cluster if set and no explicit scope/cluster
     effective_cluster = _resolve_cluster_focus(
         plan_data,
@@ -199,15 +208,14 @@ def _get_items(args, state: dict, config: dict) -> None:
         state,
         options=QueueBuildOptions(
             count=count,
-            scan_path=state.get("scan_path"),
             scope=scope,
             status=status,
             include_subjective=True,
             subjective_threshold=target_strict,
             explain=explain,
-            plan=plan_data,
             include_skipped=include_skipped,
             cluster=effective_cluster,
+            context=ctx,
         ),
     )
     items = queue.get("items", [])
@@ -241,6 +249,7 @@ def _get_items(args, state: dict, config: dict) -> None:
     plan_start_strict, breakdown = _plan_queue_context(
         state=state,
         plan_data=plan_data,
+        context=ctx,
     )
     queue_total = breakdown.queue_total if breakdown else 0
 

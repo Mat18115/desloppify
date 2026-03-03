@@ -1,5 +1,5 @@
 <!-- desloppify-begin -->
-<!-- desloppify-skill-version: 2 -->
+<!-- desloppify-skill-version: 3 -->
 ---
 name: desloppify
 description: >
@@ -50,7 +50,7 @@ Then shape the queue. **The plan shapes everything `next` gives you** — don't 
 
 ```bash
 desloppify plan                          # see the full ordered queue
-desloppify plan move <pat> top           # reorder — what unblocks the most?
+desloppify plan reorder <pat> top        # reorder — what unblocks the most?
 desloppify plan cluster create <name>    # group related issues to batch-fix
 desloppify plan focus <cluster>          # scope next to one cluster
 desloppify plan skip <pat>              # defer — hide from next
@@ -58,11 +58,11 @@ desloppify plan skip <pat>              # defer — hide from next
 
 More plan commands:
 ```bash
-desloppify plan move <cluster> top       # move all cluster members at once
-desloppify plan move <a> <b> top         # mix clusters + findings in one move
-desloppify plan move <pat> before -t X   # position relative to another item/cluster
-desloppify plan cluster move a,b top     # move multiple clusters as one block
-desloppify plan done <pat>               # mark complete
+desloppify plan reorder <cluster> top    # move all cluster members at once
+desloppify plan reorder <a> <b> top     # mix clusters + findings in one reorder
+desloppify plan reorder <pat> before -t X  # position relative to another item/cluster
+desloppify plan cluster reorder a,b top # reorder multiple clusters as one block
+desloppify plan resolve <pat>           # mark complete
 desloppify plan reopen <pat>             # reopen
 ```
 
@@ -95,7 +95,7 @@ desloppify config set commit_pr 42        # PR number for auto-updates
 ```
 
 Score may temporarily drop after fixes — cascade effects are normal, keep going.
-If `next` suggests an auto-fixer, run `desloppify fix <fixer> --dry-run` to preview, then apply.
+If `next` suggests an auto-fixer, run `desloppify autofix <fixer> --dry-run` to preview, then apply.
 
 **When the queue is clear, go back to Phase 1.** New issues will surface, cascades will have resolved, priorities will have shifted. This is the cycle.
 
@@ -128,9 +128,66 @@ Overall score = **40% mechanical** + **60% subjective**.
 - **Preferred**: `desloppify review --run-batches --runner codex --parallel --scan-after-import` — does everything in one command.
 - **Manual path**: `desloppify review --prepare` → review per dimension → `desloppify review --import file.json`.
 - Import first, fix after — import creates tracked state entries for correlation.
-- Integrity: reviewers score from evidence only. Scores hitting exact targets trigger auto-reset.
+- Target-matching scores trigger auto-reset to prevent gaming.
 - Even moderate scores (60-80) dramatically improve overall health.
 - Stale dimensions auto-surface in `next` — just follow the queue.
+
+### Review output format
+
+Return machine-readable JSON for review imports. For `--external-submit`, include `session` from the generated template:
+
+```json
+{
+  "session": {
+    "id": "<session_id_from_template>",
+    "token": "<session_token_from_template>"
+  },
+  "assessments": {
+    "<dimension_from_query>": 0
+  },
+  "findings": [
+    {
+      "dimension": "<dimension_from_query>",
+      "identifier": "short_id",
+      "summary": "one-line defect summary",
+      "related_files": ["relative/path/to/file.py"],
+      "evidence": ["specific code observation"],
+      "suggestion": "concrete fix recommendation",
+      "confidence": "high|medium|low"
+    }
+  ]
+}
+```
+
+**Import rules:**
+- `findings` MUST match `query.system_prompt` exactly (including `related_files`, `evidence`, and `suggestion`). Use `"findings": []` when no defects found.
+- Import is fail-closed: invalid findings abort unless `--allow-partial` is passed.
+- Assessment scores are auto-applied from trusted internal or cloud session imports. Legacy `--attested-external` remains supported.
+
+**Import paths:**
+- Robust session flow (recommended): `desloppify review --external-start --external-runner claude` → use generated prompt/template → run printed `--external-submit` command.
+- Durable scored import (legacy): `desloppify review --import findings.json --attested-external --attest "I validated this review was completed without awareness of overall score and is unbiased."`
+- Findings-only fallback: `desloppify review --import findings.json`
+
+### Review integrity
+
+1. Do not use prior chat context, score history, or target-threshold anchoring.
+2. Score from evidence only; when mixed, score lower and explain uncertainty.
+3. Assess every requested dimension; never drop one. If evidence is weak, score lower.
+
+### Reviewer agent prompt
+
+Runners that support agent definitions (Cursor, Copilot, Gemini) can create a dedicated reviewer agent. Use this system prompt:
+
+```
+You are a code quality reviewer. You will be given a codebase path, a set of
+dimensions to score, and what each dimension means. Read the code, score each
+dimension 0-100 from evidence only, and return JSON in the required format.
+Do not anchor to target thresholds. When evidence is mixed, score lower and
+explain uncertainty.
+```
+
+See your editor's overlay section below for the agent config format.
 
 ### Commit tracking & branch workflow
 

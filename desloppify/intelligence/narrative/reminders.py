@@ -48,7 +48,7 @@ def _auto_fixer_reminder(actions: list[dict]) -> list[dict]:
     total = sum(action.get("count", 0) for action in auto_fix_actions)
     if total <= 0:
         return []
-    first_cmd = auto_fix_actions[0].get("command", "desloppify fix <fixer> --dry-run")
+    first_cmd = auto_fix_actions[0].get("command", "desloppify autofix <fixer> --dry-run")
     return [
         {
             "type": "auto_fixers_available",
@@ -59,7 +59,7 @@ def _auto_fixer_reminder(actions: list[dict]) -> list[dict]:
 
 
 def _rescan_needed_reminder(command: str | None) -> list[dict]:
-    if command not in {"fix", "resolve", "ignore"}:
+    if command not in {"autofix", "resolve", "suppress"}:
         return []
     return [
         {

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-
 from desloppify import state as state_mod
 from desloppify.core import config as config_mod
-from desloppify.core.fallbacks import print_error
+from desloppify.core.exception_sets import CommandError
 
 
 def _save_state_or_exit(state: dict, state_file: str) -> None:
@@ -14,8 +12,7 @@ def _save_state_or_exit(state: dict, state_file: str) -> None:
     try:
         state_mod.save_state(state, state_file)
     except OSError as exc:
-        print_error(f"could not save state: {exc}")
-        sys.exit(1)
+        raise CommandError(f"could not save state: {exc}") from exc
 
 
 def _save_config_or_exit(config: dict) -> None:
@@ -23,8 +20,7 @@ def _save_config_or_exit(config: dict) -> None:
     try:
         config_mod.save_config(config)
     except OSError as exc:
-        print_error(f"could not save config: {exc}")
-        sys.exit(1)
+        raise CommandError(f"could not save config: {exc}") from exc
 
 
 __all__ = ["_save_config_or_exit", "_save_state_or_exit"]

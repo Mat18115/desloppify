@@ -11,7 +11,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from desloppify.core.exception_sets import CommandError
 from desloppify.app.commands.review import external as external_mod
+from desloppify.app.commands.review import runtime_paths as runtime_paths_mod
 from desloppify.state import empty_state as build_empty_state
 
 
@@ -33,7 +35,7 @@ def test_external_start_creates_session_and_template(tmp_path, monkeypatch):
         "_prepare_packet_snapshot",
         lambda *_args, **_kwargs: (packet, packet_path, blind_path),
     )
-    monkeypatch.setattr(external_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
+    monkeypatch.setattr(runtime_paths_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
 
     args = SimpleNamespace(
         external_runner="claude",
@@ -87,11 +89,11 @@ def test_external_submit_rejects_missing_session_metadata(tmp_path, monkeypatch)
     findings = tmp_path / "findings.json"
     findings.write_text(json.dumps({"assessments": {"naming_quality": 100}, "findings": []}))
 
-    monkeypatch.setattr(external_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
+    monkeypatch.setattr(runtime_paths_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
     lang = MagicMock()
     lang.name = "python"
 
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(CommandError) as exc_info:
         external_mod.do_external_submit(
             import_file=str(findings),
             session_id="ext_x",
@@ -100,7 +102,7 @@ def test_external_submit_rejects_missing_session_metadata(tmp_path, monkeypatch)
             state_file=tmp_path / "state.json",
             config={},
         )
-    assert exc_info.value.code == 1
+    assert exc_info.value.exit_code == 1
 
 
 def test_external_submit_canonicalizes_and_imports(tmp_path, monkeypatch):
@@ -139,7 +141,7 @@ def test_external_submit_canonicalizes_and_imports(tmp_path, monkeypatch):
         captured["import_path"] = import_path
         captured["kwargs"] = kwargs
 
-    monkeypatch.setattr(external_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
+    monkeypatch.setattr(runtime_paths_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
     monkeypatch.setattr(external_mod, "do_import", _capture_import)
 
     lang = MagicMock()
@@ -204,7 +206,7 @@ def test_external_submit_dry_run_uses_validate_import(tmp_path, monkeypatch):
     def _capture_import(*_args, **_kwargs):
         calls["import"] += 1
 
-    monkeypatch.setattr(external_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
+    monkeypatch.setattr(runtime_paths_mod, "EXTERNAL_SESSION_ROOT", tmp_path / "sessions")
     monkeypatch.setattr(external_mod, "do_validate_import", _capture_validate)
     monkeypatch.setattr(external_mod, "do_import", _capture_import)
 

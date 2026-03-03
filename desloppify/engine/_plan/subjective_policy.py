@@ -76,12 +76,22 @@ def _is_evidence_only(finding: dict) -> bool:
     return False
 
 
+_SCAN_PATH_FROM_STATE_POLICY = object()
+
+
 def compute_subjective_visibility(
     state: StateModel,
     *,
     target_strict: float = 95.0,
+    scan_path: str | None | object = _SCAN_PATH_FROM_STATE_POLICY,
+    plan: dict | None = None,
 ) -> SubjectiveVisibility:
     """Build the policy snapshot from current state.
+
+    *scan_path* defaults to ``state["scan_path"]`` so callers don't need to
+    thread it manually.  Pass an explicit ``str`` to override, or ``None``
+    to disable scope filtering.  When *plan* is set, findings whose IDs
+    appear in ``plan["skipped"]`` are excluded.
 
     Imports building-block helpers from ``stale_dimensions`` so the
     source-of-truth logic stays in one place.
@@ -91,19 +101,31 @@ def compute_subjective_visibility(
         current_under_target_ids,
         current_unscored_ids,
     )
+    from desloppify.engine._state.filtering import finding_in_scan_scope
+
+    resolved_scan_path: str | None = (
+        state.get("scan_path")
+        if scan_path is _SCAN_PATH_FROM_STATE_POLICY
+        else scan_path  # type: ignore[assignment]
+    )
 
     findings = state.get("findings", {})
+    skipped_ids = set((plan or {}).get("skipped", {}).keys())
 
     # Count open, non-suppressed, objective findings.
     # Evidence-only findings (below standalone confidence threshold) are
     # excluded — they still affect scores but are not actionable queue items.
+    # Findings outside scan_path and plan-skipped findings are also excluded
+    # so the policy matches what the user actually sees in the queue.
     objective_count = sum(
         1
-        for f in findings.values()
+        for fid, f in findings.items()
         if f.get("status") == "open"
         and f.get("detector") not in NON_OBJECTIVE_DETECTORS
         and not f.get("suppressed")
         and not _is_evidence_only(f)
+        and finding_in_scan_scope(str(f.get("file", "")), resolved_scan_path)
+        and fid not in skipped_ids
     )
 
     unscored = current_unscored_ids(state)

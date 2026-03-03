@@ -6,9 +6,14 @@ the import cycle that previously forced function-level imports in scan.py.
 
 from __future__ import annotations
 
-from desloppify.app.commands.helpers.queue_progress import plan_aware_queue_count
+import logging
+
+from desloppify.app.commands.helpers.queue_progress import plan_aware_queue_breakdown
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_api import colorize
 from desloppify.engine.plan import load_plan
+
+_logger = logging.getLogger(__name__)
 
 
 def print_plan_workflow_nudge(state: dict) -> None:
@@ -17,8 +22,10 @@ def print_plan_workflow_nudge(state: dict) -> None:
         plan = load_plan()
         if not plan.get("plan_start_scores"):
             return
-        queue_total = plan_aware_queue_count(state, plan)
-    except (OSError, ValueError, KeyError, TypeError):
+        breakdown = plan_aware_queue_breakdown(state, plan)
+        queue_total = breakdown.actionable
+    except PLAN_LOAD_EXCEPTIONS:
+        _logger.debug("plan workflow nudge skipped", exc_info=True)
         return
 
     if queue_total <= 0:

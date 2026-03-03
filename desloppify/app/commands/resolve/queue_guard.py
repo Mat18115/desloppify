@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_api import colorize
 from desloppify.engine.plan import has_living_plan, load_plan
-from desloppify.engine.work_queue import QueueBuildOptions, build_work_queue
+from desloppify.engine._work_queue.plan_order import collapse_clusters
+from desloppify.engine.work_queue import QueueBuildOptions, build_work_queue, queue_context
+
+_logger = logging.getLogger(__name__)
 
 
 def _check_queue_order_guard(
@@ -23,19 +29,22 @@ def _check_queue_order_guard(
         if not queue_order:
             return False
 
+        ctx = queue_context(state, plan=plan)
         result = build_work_queue(
             state,
             options=QueueBuildOptions(
-                plan=plan,
-                count=1,
-                collapse_clusters=True,
+                count=None,
                 include_subjective=True,
+                context=ctx,
             ),
         )
-        if not result["items"]:
+        items = result["items"]
+        if not plan.get("active_cluster"):
+            items = collapse_clusters(items, plan)
+        if not items:
             return False
 
-        front_item = result["items"][0]
+        front_item = items[0]
         front_id = front_item["id"]
 
         front_ids: set[str] = set()
@@ -83,11 +92,12 @@ def _check_queue_order_guard(
             print(f"    {finding_id}")
         print(colorize(f"\n  The current next item is: {front_id}", "dim"))
         print(colorize("  Items must be resolved in plan order. If you need to reprioritize:", "dim"))
-        print(colorize("    desloppify plan move <pattern> --position top    # move to front", "dim"))
+        print(colorize("    desloppify plan reorder <pattern> top            # move to front", "dim"))
         print(colorize("    desloppify plan skip <pattern> --reason '...'    # skip for now", "dim"))
         print(colorize("    desloppify next                                  # see what's next\n", "dim"))
         return True
-    except (OSError, ValueError, KeyError, TypeError):
+    except PLAN_LOAD_EXCEPTIONS:
+        _logger.debug("queue order guard skipped", exc_info=True)
         return False
 
 

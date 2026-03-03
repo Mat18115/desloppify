@@ -135,9 +135,9 @@ def _append_auto_fix_actions(
                 "count": count,
                 "description": (
                     f"{count} {detector} findings — run "
-                    f"`desloppify fix {fixer} --dry-run` to preview, then apply"
+                    f"`desloppify autofix {fixer} --dry-run` to preview, then apply"
                 ),
-                "command": f"desloppify fix {fixer} --dry-run",
+                "command": f"desloppify autofix {fixer} --dry-run",
                 "impact": impact,
                 "dimension": _dimension_name(detector),
             }

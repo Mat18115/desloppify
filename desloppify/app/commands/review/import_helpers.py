@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -20,31 +19,22 @@ from .import_parse import (
     _validate_holistic_findings_schema,
     resolve_override_context,
 )
-from .import_policy import _assessment_provenance_status as _policy_assessment_provenance_status
+from .import_policy import (
+    ASSESSMENT_POLICY_KEY,
+    ATTESTED_EXTERNAL_ATTEST_EXAMPLE,
+    apply_assessment_import_policy,
+    assessment_mode_label,
+    assessment_policy_from_payload,
+    assessment_policy_model_from_payload,
+)
 from desloppify.intelligence.review.importing.contracts import (
     AssessmentImportPolicyModel,
-    AssessmentImportPolicy,
-    AssessmentProvenanceModel,
     ReviewImportPayload,
 )
 from desloppify.intelligence.review.feedback_contract import (
     ASSESSMENT_FEEDBACK_THRESHOLD,
     LOW_SCORE_FINDING_THRESHOLD,
 )
-
-_ASSESSMENT_POLICY_KEY = "_assessment_policy"
-_ATTESTED_EXTERNAL_RUNNERS = {"claude"}
-_ATTESTED_EXTERNAL_REQUIRED_PHRASES = ("without awareness", "unbiased")
-_ATTESTED_EXTERNAL_ATTEST_EXAMPLE = (
-    "I validated this review was completed without awareness of overall score and is unbiased."
-)
-_ASSESSMENT_MODE_LABELS = {
-    "none": "findings-only (no assessments in payload)",
-    "trusted_internal": "trusted internal (durable scores)",
-    "attested_external": "attested external (durable scores)",
-    "manual_override": "manual override (provisional scores)",
-    "findings_only": "findings-only (assessments skipped)",
-}
 
 
 class ImportPayloadLoadError(ValueError):
@@ -108,7 +98,7 @@ def _normalize_import_payload_shape(
         errors.append("dimension_notes must be an object when provided")
         dimension_notes = {}
 
-    policy = payload.get(_ASSESSMENT_POLICY_KEY)
+    policy = payload.get(ASSESSMENT_POLICY_KEY)
     normalized_policy = (
         policy if isinstance(policy, dict) else AssessmentImportPolicyModel().to_dict()
     )
@@ -122,152 +112,10 @@ def _normalize_import_payload_shape(
             "review_scope": review_scope,
             "provenance": provenance,
             "dimension_notes": dimension_notes,
-            _ASSESSMENT_POLICY_KEY: normalized_policy,
+            ASSESSMENT_POLICY_KEY: normalized_policy,
         },
         [],
     )
-
-
-def _assessment_provenance_status(
-    findings_data: ReviewImportPayload,
-    *,
-    import_file: str,
-) -> AssessmentProvenanceModel:
-    """Evaluate whether assessments come from a trusted blind batch artifact."""
-    return _policy_assessment_provenance_status(
-        findings_data,
-        import_file=import_file,
-    )
-
-
-def _validate_attested_external_attestation(attest: str | None) -> str | None:
-    """Validate and normalize attestation text for attested external imports."""
-    if not isinstance(attest, str) or not attest.strip():
-        return None
-    text = attest.strip()
-    lowered = text.lower()
-    if all(phrase in lowered for phrase in _ATTESTED_EXTERNAL_REQUIRED_PHRASES):
-        return text
-    return None
-
-
-def _apply_assessment_import_policy(
-    findings_data: ReviewImportPayload,
-    *,
-    import_file: str,
-    attested_external: bool,
-    attested_attest: str | None,
-    manual_override: bool,
-    manual_attest: str | None,
-    trusted_assessment_source: bool,
-    trusted_assessment_label: str | None,
-) -> tuple[ReviewImportPayload | None, list[str]]:
-    """Apply trust gating for assessment imports (findings import always allowed)."""
-    assessments = findings_data["assessments"]
-    has_assessments = bool(assessments)
-    assessment_count = len(assessments) if has_assessments else 0
-    provenance_status = _assessment_provenance_status(
-        findings_data, import_file=import_file
-    )
-    policy = AssessmentImportPolicyModel(
-        assessments_present=has_assessments,
-        assessment_count=int(assessment_count),
-        trusted=False,
-        mode="none",
-        reason="",
-        provenance=provenance_status,
-    )
-
-    def _attach_policy(payload: ReviewImportPayload) -> ReviewImportPayload:
-        normalized = dict(payload)
-        normalized[_ASSESSMENT_POLICY_KEY] = policy.to_dict()
-        return normalized
-
-    if not has_assessments:
-        return _attach_policy(findings_data), []
-
-    if trusted_assessment_source:
-        policy = replace(
-            policy,
-            mode="trusted_internal",
-            trusted=True,
-            reason=(trusted_assessment_label or "trusted internal run-batches import"),
-        )
-        return _attach_policy(findings_data), []
-
-    if attested_external:
-        normalized_attest = _validate_attested_external_attestation(attested_attest)
-        if normalized_attest is None:
-            return None, [
-                "--attested-external requires --attest containing both "
-                "'without awareness' and 'unbiased'"
-            ]
-        if provenance_status.trusted is not True:
-            return None, [
-                "--attested-external requires valid blind packet provenance "
-                f"(current status: {provenance_status.reason or 'untrusted provenance'})"
-            ]
-        runner = provenance_status.runner.strip().lower()
-        if runner not in _ATTESTED_EXTERNAL_RUNNERS:
-            return None, [
-                "--attested-external currently supports runner='claude' provenance only"
-            ]
-        policy = replace(
-            policy,
-            mode="attested_external",
-            trusted=True,
-            reason="attested external blind subagent provenance",
-            attest=normalized_attest,
-        )
-        return _attach_policy(findings_data), []
-
-    if manual_override:
-        if not isinstance(manual_attest, str) or not manual_attest.strip():
-            return None, ["--manual-override requires --attest"]
-        policy = replace(
-            policy,
-            mode="manual_override",
-            reason="manual override attested by operator",
-            attest=manual_attest.strip(),
-        )
-        return _attach_policy(findings_data), []
-
-    policy = replace(policy, mode="findings_only")
-    if findings_data["provenance"]:
-        provenance_reason = provenance_status.reason.strip()
-        if provenance_status.trusted is True:
-            policy = replace(
-                policy,
-                reason=(
-                    "external imports cannot self-attest trust even when provenance appears valid; "
-                    "run review --run-batches to apply assessments automatically"
-                ),
-            )
-        elif provenance_reason:
-            policy = replace(
-                policy,
-                reason=(
-                    "external imports cannot self-attest trust "
-                    f"({provenance_reason}); run review --run-batches to apply assessments automatically"
-                ),
-            )
-        else:
-            policy = replace(
-                policy,
-                reason=(
-                    "external imports cannot self-attest trust; "
-                    "run review --run-batches to apply assessments automatically"
-                ),
-            )
-    else:
-        policy = replace(
-            policy,
-            reason="missing trusted run-batches source; imported findings only",
-        )
-    payload = dict(findings_data)
-    payload["assessments"] = {}
-    payload[_ASSESSMENT_POLICY_KEY] = policy.to_dict()
-    return payload, []
 
 
 def _parse_and_validate_import(
@@ -331,7 +179,7 @@ def _parse_and_validate_import(
             "--manual-override cannot be combined with --allow-partial; "
             "manual score imports require fully valid findings payloads"
         ]
-    findings_data, policy_errors = _apply_assessment_import_policy(
+    findings_data, policy_errors = apply_assessment_import_policy(
         normalized_findings_data,
         import_file=import_file,
         attested_external=attested_external,
@@ -426,29 +274,8 @@ def load_import_findings_data(
     return data
 
 
-def assessment_policy_from_payload(payload: ReviewImportPayload) -> AssessmentImportPolicy:
-    """Return parsed assessment policy metadata from a loaded import payload."""
-    policy = payload[_ASSESSMENT_POLICY_KEY]
-    if isinstance(policy, dict):
-        return policy
-    return AssessmentImportPolicyModel().to_dict()
-
-
-def assessment_policy_model_from_payload(
-    payload: ReviewImportPayload,
-) -> AssessmentImportPolicyModel:
-    """Return typed assessment policy metadata from a loaded import payload."""
-    return AssessmentImportPolicyModel.from_mapping(assessment_policy_from_payload(payload))
-
-
-def assessment_mode_label(policy: AssessmentImportPolicy) -> str:
-    """Return a user-facing label for the selected assessment import mode."""
-    mode = AssessmentImportPolicyModel.from_mapping(policy).mode.strip().lower()
-    return _ASSESSMENT_MODE_LABELS.get(mode, f"unknown ({mode or 'none'})")
-
-
 def print_assessment_policy_notice(
-    policy: AssessmentImportPolicy,
+    policy,
     *,
     import_file: str,
     colorize_fn,
@@ -541,7 +368,7 @@ def print_assessment_policy_notice(
             colorize_fn(
                 "  Claude cloud path for durable scores: "
                 f"`desloppify review --import {import_file} --attested-external "
-                f"--attest \"{_ATTESTED_EXTERNAL_ATTEST_EXAMPLE}\"`",
+                f"--attest \"{ATTESTED_EXTERNAL_ATTEST_EXAMPLE}\"`",
                 "dim",
             )
         )

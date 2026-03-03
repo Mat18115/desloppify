@@ -1,4 +1,8 @@
-"""Shared runtime path resolution for review command flows."""
+"""Shared runtime path resolution for review command flows.
+
+All override hooks live here so tests patch a single module instead of
+per-command boilerplate.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +10,18 @@ from pathlib import Path
 
 from desloppify.core.text_api import get_project_root
 
+# ── Test override hooks (monkeypatch these in tests) ──────────────
+PROJECT_ROOT: Path | None = None
+REVIEW_PACKET_DIR: Path | None = None
+SUBAGENT_RUNS_DIR: Path | None = None
+EXTERNAL_SESSION_ROOT: Path | None = None
+
 
 def runtime_project_root(*, project_root_override: Path | None = None) -> Path:
     """Resolve project root with optional test override hook."""
-    if isinstance(project_root_override, Path):
-        return project_root_override
+    override = project_root_override if project_root_override is not None else PROJECT_ROOT
+    if isinstance(override, Path):
+        return override
     return get_project_root()
 
 
@@ -20,8 +31,9 @@ def review_packet_dir(
     review_packet_dir_override: Path | None = None,
 ) -> Path:
     """Resolve `.desloppify/review_packets` with optional override."""
-    if isinstance(review_packet_dir_override, Path):
-        return review_packet_dir_override
+    override = review_packet_dir_override if review_packet_dir_override is not None else REVIEW_PACKET_DIR
+    if isinstance(override, Path):
+        return override
     return runtime_project_root(project_root_override=project_root_override) / ".desloppify" / "review_packets"
 
 
@@ -47,8 +59,9 @@ def subagent_runs_dir(
     subagent_runs_dir_override: Path | None = None,
 ) -> Path:
     """Resolve subagent run artifact directory with optional override."""
-    if isinstance(subagent_runs_dir_override, Path):
-        return subagent_runs_dir_override
+    override = subagent_runs_dir_override if subagent_runs_dir_override is not None else SUBAGENT_RUNS_DIR
+    if isinstance(override, Path):
+        return override
     return runtime_project_root(project_root_override=project_root_override) / ".desloppify" / "subagents" / "runs"
 
 
@@ -58,8 +71,9 @@ def external_session_root(
     external_session_root_override: Path | None = None,
 ) -> Path:
     """Resolve external review session root with optional override."""
-    if isinstance(external_session_root_override, Path):
-        return external_session_root_override
+    override = external_session_root_override if external_session_root_override is not None else EXTERNAL_SESSION_ROOT
+    if isinstance(override, Path):
+        return override
     return runtime_project_root(project_root_override=project_root_override) / ".desloppify" / "external_review_sessions"
 
 

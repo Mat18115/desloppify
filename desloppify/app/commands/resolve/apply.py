@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 from desloppify import state as state_mod
 from desloppify.app.commands.helpers.query import write_query_best_effort as _write_query_best_effort
+from desloppify.core.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.core.output_contract import OutputResult
 from desloppify.engine.plan import has_living_plan, load_plan
 
 from .selection import ResolveQueryContext
+
+_logger = logging.getLogger(__name__)
 
 
 def _try_expand_cluster(pattern: str) -> list[str] | None:
@@ -21,8 +25,8 @@ def _try_expand_cluster(pattern: str) -> list[str] | None:
         cluster = plan.get("clusters", {}).get(pattern)
         if cluster and cluster.get("finding_ids"):
             return list(cluster["finding_ids"])
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        _ = exc
+    except PLAN_LOAD_EXCEPTIONS:
+        _logger.debug("cluster expansion skipped for %r", pattern, exc_info=True)
     return None
 
 

@@ -4,14 +4,22 @@ import inspect
 
 import pytest
 
+from desloppify.core.exception_sets import CommandError
 import desloppify.app.commands.resolve.apply as resolve_apply_mod
 import desloppify.app.commands.resolve.cmd as resolve_mod
 import desloppify.app.commands.resolve.selection as resolve_selection_mod
 import desloppify.cli as cli_mod
+import desloppify.engine.plan as plan_mod
 import desloppify.intelligence.narrative as narrative_mod
 import desloppify.state as state_mod
-from desloppify.app.commands.resolve.cmd import cmd_ignore_pattern, cmd_resolve
+from desloppify.app.commands.resolve.cmd import cmd_suppress_pattern, cmd_resolve
 from desloppify.engine.work_queue import ATTEST_EXAMPLE
+
+
+@pytest.fixture(autouse=True)
+def _isolate_plan(monkeypatch):
+    """Prevent resolve tests from touching the real .desloppify/plan.json."""
+    monkeypatch.setattr(plan_mod, "has_living_plan", lambda: False)
 
 # ---------------------------------------------------------------------------
 # Module-level sanity
@@ -24,16 +32,16 @@ class TestResolveModuleSanity:
     def test_cmd_resolve_callable(self):
         assert callable(cmd_resolve)
 
-    def test_cmd_ignore_pattern_callable(self):
-        assert callable(cmd_ignore_pattern)
+    def test_cmd_suppress_pattern_callable(self):
+        assert callable(cmd_suppress_pattern)
 
     def test_cmd_resolve_signature(self):
         sig = inspect.signature(cmd_resolve)
         params = list(sig.parameters.keys())
         assert params == ["args"]
 
-    def test_cmd_ignore_pattern_signature(self):
-        sig = inspect.signature(cmd_ignore_pattern)
+    def test_cmd_suppress_pattern_signature(self):
+        sig = inspect.signature(cmd_suppress_pattern)
         params = list(sig.parameters.keys())
         assert params == ["args"]
 
@@ -57,9 +65,9 @@ class TestCmdResolve:
             lang = None
             path = "."
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_resolve(FakeArgs())
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
 
     def test_fixed_without_attestation_exits(self, monkeypatch, capsys):
         monkeypatch.setattr(resolve_mod, "state_path", lambda a: "/tmp/fake.json")
@@ -72,9 +80,9 @@ class TestCmdResolve:
             lang = None
             path = "."
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_resolve(FakeArgs())
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
         err = capsys.readouterr().err
         assert "Manual resolve requires --attest" in err
         assert "Required keywords: 'I have actually' and 'not gaming'." in err
@@ -91,9 +99,9 @@ class TestCmdResolve:
             lang = None
             path = "."
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_resolve(FakeArgs())
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
         err = capsys.readouterr().err
         assert "missing required keyword(s)" in err
         assert "'i have actually'" in err
@@ -294,11 +302,10 @@ class TestCmdResolve:
             lang = None
             path = "."
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_resolve(FakeArgs())
-        assert exc_info.value.code == 1
-        err = capsys.readouterr().err
-        assert "could not save state" in err
+        assert exc_info.value.exit_code == 1
+        assert "could not save state" in exc_info.value.message
 
     def test_large_wontfix_batch_requires_confirmation(self, monkeypatch, capsys):
         monkeypatch.setattr(resolve_mod, "state_path", lambda a: "/tmp/fake.json")
@@ -331,17 +338,17 @@ class TestCmdResolve:
             path = "."
             confirm_batch_wontfix = False
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(CommandError) as exc_info:
             cmd_resolve(FakeArgs())
-        assert exc_info.value.code == 1
+        assert exc_info.value.exit_code == 1
         err = capsys.readouterr().err
         assert "Large wontfix batch detected" in err
         assert "Estimated strict-score debt added now: 2.4 points." in err
-        assert "--confirm-batch-wontfix" in err
+        assert "--confirm-batch-wontfix" in exc_info.value.message
 
 
-class TestCmdIgnore:
-    def test_ignore_without_attestation_exits(self, monkeypatch, capsys):
+class TestCmdSuppress:
+    def test_suppress_without_attestation_exits(self, monkeypatch, capsys):
         monkeypatch.setattr(resolve_mod, "state_path", lambda a: "/tmp/fake.json")
 
         class FakeArgs:
@@ -351,15 +358,15 @@ class TestCmdIgnore:
             lang = None
             path = "."
 
-        with pytest.raises(SystemExit) as exc_info:
-            cmd_ignore_pattern(FakeArgs())
-        assert exc_info.value.code == 1
+        with pytest.raises(CommandError) as exc_info:
+            cmd_suppress_pattern(FakeArgs())
+        assert exc_info.value.exit_code == 1
         err = capsys.readouterr().err
-        assert "Ignore requires --attest" in err
+        assert "Suppress requires --attest" in err
         assert "Required keywords: 'I have actually' and 'not gaming'." in err
         assert f'--attest "{ATTEST_EXAMPLE}"' in err
 
-    def test_ignore_save_state_error_exits(self, monkeypatch, capsys):
+    def test_suppress_save_state_error_exits(self, monkeypatch, capsys):
         monkeypatch.setattr(resolve_mod, "state_path", lambda a: "/tmp/fake.json")
         monkeypatch.setattr(state_mod, "load_state", lambda sp: {"findings": {}})
         monkeypatch.setattr(
@@ -380,8 +387,7 @@ class TestCmdIgnore:
             lang = None
             path = "."
 
-        with pytest.raises(SystemExit) as exc_info:
-            cmd_ignore_pattern(FakeArgs())
-        assert exc_info.value.code == 1
-        err = capsys.readouterr().err
-        assert "could not save state" in err
+        with pytest.raises(CommandError) as exc_info:
+            cmd_suppress_pattern(FakeArgs())
+        assert exc_info.value.exit_code == 1
+        assert "could not save state" in exc_info.value.message

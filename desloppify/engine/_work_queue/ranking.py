@@ -12,12 +12,24 @@ from desloppify.engine._work_queue.helpers import (
     scope_matches,
     slugify,
     status_matches,
-    subjective_strict_scores,
     supported_fixers_for_item,
 )
+from desloppify.engine._work_queue.synthetic import subjective_strict_scores
 from desloppify.core.registry import DETECTORS
 from desloppify.engine.planning.common import CONFIDENCE_ORDER
 from desloppify.state import path_scoped_findings
+
+# Plan-aware sort tiers (item_sort_key)
+_TIER_PLANNED = 0   # Items with explicit plan position
+_TIER_EXISTING = 1  # Known items, natural ranking
+_TIER_NEW = 2       # Newly discovered items
+
+# Natural ranking groups (_natural_sort_key)
+_RANK_INITIAL_REVIEW = -3  # Unassessed subjective dimensions
+_RANK_TRIAGE_STAGE = -2    # Epic triage workflow stages
+_RANK_WORKFLOW = -1         # Score checkpoints, create-plan
+_RANK_CLUSTER = 0           # Auto-clustered findings
+_RANK_FINDING = 1           # Individual findings + assessed subjective
 
 
 def enrich_with_impact(items: list[dict], dimension_scores: dict) -> None:
@@ -150,22 +162,23 @@ def build_finding_items(
     return out
 
 
-def item_sort_key(item: dict) -> tuple:
+def _natural_sort_key(item: dict) -> tuple:
+    """Compute natural (non-plan-aware) ranking for queue items."""
     kind = item.get("kind", "finding")
 
-    # Initial-review subjective items: highest priority (tier -3)
+    # Initial-review subjective items: highest priority
     if kind == "subjective_dimension" and item.get("initial_review"):
-        return (-3, 0, subjective_score_value(item), item.get("id", ""))
+        return (_RANK_INITIAL_REVIEW, 0, subjective_score_value(item), item.get("id", ""))
 
-    # Triage stage items: tier -2, stage order, blocked after unblocked
+    # Triage stage items: stage order, blocked after unblocked
     if kind == "workflow_stage":
         blocked_penalty = 1 if item.get("is_blocked") else 0
         stage_index = int(item.get("stage_index", 0))
-        return (-2, blocked_penalty, stage_index, item.get("id", ""))
+        return (_RANK_TRIAGE_STAGE, blocked_penalty, stage_index, item.get("id", ""))
 
-    # Workflow action items (e.g. create-plan): tier -1
+    # Workflow action items (e.g. create-plan)
     if kind == "workflow_action":
-        return (-1, 0, 0, item.get("id", ""))
+        return (_RANK_WORKFLOW, 0, 0, item.get("id", ""))
 
     if kind == "cluster":
         # Clusters sort before individual findings, ordered by action type
@@ -173,7 +186,7 @@ def item_sort_key(item: dict) -> tuple:
             item.get("action_type", "manual_fix"), 3
         )
         return (
-            0,
+            _RANK_CLUSTER,
             action_pri,
             -int(item.get("member_count", 0)),
             item.get("id", ""),
@@ -183,7 +196,7 @@ def item_sort_key(item: dict) -> tuple:
 
     if kind == "subjective_dimension" or item.get("is_subjective"):
         return (
-            1,
+            _RANK_FINDING,
             -impact,
             subjective_score_value(item),
             item.get("id", ""),
@@ -192,13 +205,39 @@ def item_sort_key(item: dict) -> tuple:
     detail = detail_dict(item)
     review_weight = float(item.get("review_weight", 0.0) or 0.0)
     return (
-        1,
+        _RANK_FINDING,
         -impact,
         CONFIDENCE_ORDER.get(item.get("confidence", "low"), 9),
         -review_weight,
         -int(detail.get("count", 0) or 0),
         item.get("id", ""),
     )
+
+
+def item_sort_key(item: dict) -> tuple:
+    """Unified sort key: plan position first, then natural ranking.
+
+    When ``_plan_position`` is stamped (by :func:`stamp_plan_sort_keys`),
+    planned items sort first in plan order, then existing items by natural
+    ranking, then newly-discovered items by natural ranking.
+
+    When no plan fields are stamped, falls back to pure natural ranking.
+    """
+    plan_pos = item.get("_plan_position")
+
+    if plan_pos is not None:
+        kind = item.get("kind", "finding")
+        # Triage stages: even when explicitly planned, maintain the
+        # blocked-before-unblocked invariant for correctness.
+        if kind == "workflow_stage":
+            blocked = 1 if item.get("is_blocked") else 0
+            stage_idx = int(item.get("stage_index", 0))
+            return (_TIER_PLANNED, blocked, stage_idx, item.get("id", ""))
+        return (_TIER_PLANNED, 0, plan_pos, item.get("id", ""))
+
+    is_new = item.get("_is_new", False)
+    group = _TIER_NEW if is_new else _TIER_EXISTING
+    return (group, *_natural_sort_key(item))
 
 
 def item_explain(item: dict) -> dict:

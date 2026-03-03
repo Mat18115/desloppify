@@ -34,26 +34,6 @@ class TestFixModuleSanity:
         assert isinstance(_SKIP_REASON_LABELS, dict)
         assert len(_SKIP_REASON_LABELS) > 0
 
-    def test_fix_review_is_special_alias(self, monkeypatch):
-        from types import SimpleNamespace
-
-        import desloppify.app.commands.fix.cmd as fix_mod
-
-        called = {"review": 0}
-        monkeypatch.setattr(
-            fix_mod,
-            "_cmd_fix_review",
-            lambda _args: called.__setitem__("review", called["review"] + 1),
-        )
-        monkeypatch.setattr(
-            fix_mod,
-            "_load_fixer",
-            lambda *_args, **_kwargs: pytest.fail("review fixer should bypass _load_fixer"),
-        )
-        args = SimpleNamespace(fixer="review", dry_run=True, path=".")
-        fix_mod.cmd_fix(args)
-        assert called["review"] == 1
-
 
 # ---------------------------------------------------------------------------
 # FixResult
@@ -289,4 +269,4 @@ class TestFixNarrativeReminders:
         )
         _ = capsys.readouterr().out
         context = captured_kwargs["context"]
-        assert context.command == "fix"
+        assert context.command == "autofix"

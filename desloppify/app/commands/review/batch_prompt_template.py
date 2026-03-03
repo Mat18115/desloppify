@@ -303,7 +303,7 @@ def _render_task_requirements(context: _PromptBatchContext) -> str:
         "2b. Keep exploration targeted — follow strongest evidence paths first instead of attempting exhaustive coverage.\n"
         "2c. Keep findings and scoring scoped to this batch's listed dimensions.\n"
         "2d. Respect scope controls in the blind packet config: do not include files/directories marked by "
-        "`exclude`, `ignore`, or zone overrides that classify files as non-production (test/config/generated/vendor).\n"
+        "`exclude`, `suppress`, or zone overrides that classify files as non-production (test/config/generated/vendor).\n"
         f"3. Return 0-{context.findings_cap} high-quality findings for this batch (empty array allowed).\n"
         "3a. Do not suppress real defects to keep scores high; report every material issue you can support with evidence.\n"
         "3b. Do not default to 100. Reserve 100 for genuinely exemplary evidence in this batch.\n"

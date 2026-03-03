@@ -1,23 +1,34 @@
 """Tests for desloppify.languages.typescript.detectors._smell_helpers — string processing helpers."""
 
 from desloppify.languages.typescript.detectors._smell_detectors import (
+    _detect_async_no_await,
     _detect_catch_return_default,
-    _detect_dead_functions,
+    _detect_dead_useeffects,
+    _detect_empty_if_chains,
+    _detect_error_no_throw,
     _detect_monster_functions,
+    _detect_stub_functions,
+    _detect_swallowed_errors,
     _detect_window_globals,
     _find_function_start,
 )
 from desloppify.languages.typescript.detectors._smell_helpers import (
-    _detect_async_no_await,
-    _detect_dead_useeffects,
-    _detect_empty_if_chains,
-    _detect_error_no_throw,
-    _detect_swallowed_errors,
+    _FileContext,
+    _code_text,
+    _content_line_info,
+    _extract_block_body,
     _strip_ts_comments,
     _track_brace_body,
     _ts_match_is_in_string,
 )
 from desloppify.languages.typescript.detectors.smells import TS_SMELL_CHECKS
+
+
+def _ctx(content: str, filepath: str = "test.ts") -> _FileContext:
+    """Build a _FileContext from content string for testing."""
+    lines = content.splitlines()
+    return _FileContext(filepath=filepath, content=content, lines=lines, line_state={})
+
 
 # ── _strip_ts_comments ───────────────────────────────────────
 
@@ -70,6 +81,60 @@ class TestStripTsComments:
     def test_unterminated_line_comment(self):
         result = _strip_ts_comments("code // line comment no newline")
         assert result == "code "
+
+
+# ── _code_text ───────────────────────────────────────────────
+
+
+class TestCodeText:
+    def test_preserves_plain_code(self):
+        assert _code_text("const x = 1;") == "const x = 1;"
+
+    def test_blanks_double_quoted_string(self):
+        result = _code_text('const s = "hello";')
+        # Opening quote + contents blanked; closing quote preserved by scan_code
+        assert "hello" not in result
+        assert len(result) == len('const s = "hello";')
+
+    def test_blanks_single_quoted_string(self):
+        result = _code_text("const s = 'hello';")
+        assert "hello" not in result
+        assert result.startswith("const s = ")
+
+    def test_blanks_template_literal(self):
+        result = _code_text("const s = `hello`;")
+        assert "hello" not in result
+
+    def test_blanks_line_comment(self):
+        result = _code_text("code // comment")
+        assert "comment" not in result
+        assert result.startswith("code ")
+        assert len(result) == len("code // comment")
+
+    def test_blanks_line_comment_multiline(self):
+        result = _code_text("code // comment\nnext line")
+        assert "next line" in result
+        assert "comment" not in result
+
+    def test_preserves_positions(self):
+        text = 'x = "str"; y = 1;'
+        result = _code_text(text)
+        assert len(result) == len(text)
+        assert result[0] == "x"
+        assert result[-1] == ";"
+
+    def test_division_not_treated_as_comment(self):
+        result = _code_text("a / b / c")
+        assert result == "a / b / c"
+
+    def test_await_in_string_blanked(self):
+        result = _code_text("const s = 'await something';")
+        assert "await" not in result
+
+    def test_await_in_comment_blanked(self):
+        result = _code_text("return 1; // await fetch")
+        assert "await" not in result
+        assert result.startswith("return 1;")
 
 
 # ── _ts_match_is_in_string ───────────────────────────────────
@@ -145,6 +210,54 @@ class TestTrackBraceBody:
         assert _track_brace_body(lines, 0) is None
 
 
+# ── _extract_block_body ──────────────────────────────────────
+
+
+class TestExtractBlockBody:
+    def test_simple_block(self):
+        content = "if (x) { return 1; }"
+        brace_pos = content.index("{")
+        assert _extract_block_body(content, brace_pos) == " return 1; "
+
+    def test_nested_braces(self):
+        content = "outer { inner { x } y }"
+        brace_pos = content.index("{")
+        assert _extract_block_body(content, brace_pos) == " inner { x } y "
+
+    def test_unclosed_returns_none(self):
+        content = "if (x) { return 1;"
+        brace_pos = content.index("{")
+        assert _extract_block_body(content, brace_pos) is None
+
+    def test_string_braces_ignored(self):
+        content = "fn() { const s = '{}'; }"
+        brace_pos = content.index("{")
+        assert _extract_block_body(content, brace_pos) == " const s = '{}'; "
+
+
+# ── _content_line_info ───────────────────────────────────────
+
+
+class TestContentLineInfo:
+    def test_first_line(self):
+        content = "catch (e) { console.log(e); }"
+        line_no, snippet = _content_line_info(content, 0)
+        assert line_no == 1
+        assert "catch" in snippet
+
+    def test_multiline(self):
+        content = "line one\nline two\nline three"
+        line_no, snippet = _content_line_info(content, content.index("two"))
+        assert line_no == 2
+        assert snippet == "line two"
+
+    def test_snippet_truncated(self):
+        long_line = "x" * 200
+        content = f"first\n{long_line}\nthird"
+        _, snippet = _content_line_info(content, content.index(long_line))
+        assert len(snippet) == 100
+
+
 # ── _find_function_start ─────────────────────────────────────
 
 
@@ -202,24 +315,43 @@ def _make_counts():
 class TestDetectAsyncNoAwait:
     def test_flags_async_without_await(self):
         content = "async function fetchData() {\n  return 1;\n}\n"
-        lines = content.splitlines()
         counts = _make_counts()
-        _detect_async_no_await("test.ts", content, lines, counts)
+        _detect_async_no_await(_ctx(content), counts)
         assert len(counts["async_no_await"]) == 1
 
     def test_skips_async_with_await(self):
         content = "async function fetchData() {\n  const d = await fetch('/');\n  return d;\n}\n"
-        lines = content.splitlines()
         counts = _make_counts()
-        _detect_async_no_await("test.ts", content, lines, counts)
+        _detect_async_no_await(_ctx(content), counts)
         assert len(counts["async_no_await"]) == 0
 
     def test_arrow_async_without_await(self):
         content = "const fn = async () => {\n  return 42;\n}\n"
-        lines = content.splitlines()
         counts = _make_counts()
-        _detect_async_no_await("test.ts", content, lines, counts)
+        _detect_async_no_await(_ctx(content), counts)
         assert len(counts["async_no_await"]) == 1
+
+    def test_await_in_comment_still_flagged(self):
+        """'await' inside a comment should not count — function is still flagged."""
+        content = "async function fetchData() {\n  // await fetch('/');\n  return 1;\n}\n"
+        counts = _make_counts()
+        _detect_async_no_await(_ctx(content), counts)
+        assert len(counts["async_no_await"]) == 1
+
+    def test_await_in_string_still_flagged(self):
+        """'await' inside a string literal should not count — function is still flagged."""
+        content = "async function fetchData() {\n  const s = 'await something';\n  return s;\n}\n"
+        counts = _make_counts()
+        _detect_async_no_await(_ctx(content), counts)
+        assert len(counts["async_no_await"]) == 1
+
+    def test_await_beyond_line_200_detected(self):
+        """Await past old 200-line cap should still be detected (limit is now 2000)."""
+        filler = "\n".join(f"  const x{i} = {i};" for i in range(250))
+        content = f"async function big() {{\n{filler}\n  const d = await fetch('/');\n  return d;\n}}\n"
+        counts = _make_counts()
+        _detect_async_no_await(_ctx(content), counts)
+        assert len(counts["async_no_await"]) == 0
 
 
 class TestDetectErrorNoThrow:
@@ -233,7 +365,7 @@ class TestDetectErrorNoThrow:
             "}",
         ]
         counts = _make_counts()
-        _detect_error_no_throw("test.ts", lines, counts)
+        _detect_error_no_throw(_ctx("\n".join(lines)), counts)
         assert len(counts["console_error_no_throw"]) == 1
 
     def test_skips_when_throw_follows(self):
@@ -244,87 +376,155 @@ class TestDetectErrorNoThrow:
             "}",
         ]
         counts = _make_counts()
-        _detect_error_no_throw("test.ts", lines, counts)
+        _detect_error_no_throw(_ctx("\n".join(lines)), counts)
+        assert len(counts["console_error_no_throw"]) == 0
+
+    def test_skips_logger_files(self):
+        """Logger utility files should be entirely skipped."""
+        lines = [
+            "function logError(msg) {",
+            "  console.error(msg);",
+            "  doSomething();",
+            "  doMore();",
+            "  doEvenMore();",
+            "}",
+        ]
+        counts = _make_counts()
+        _detect_error_no_throw(_ctx("\n".join(lines), "src/utils/logger.ts"), counts)
+        assert len(counts["console_error_no_throw"]) == 0
+
+    def test_skips_error_handler_files(self):
+        """Error handler utility files should be entirely skipped."""
+        lines = [
+            "function handleError(err) {",
+            "  console.error(err);",
+            "  doSomething();",
+            "  doMore();",
+            "  doEvenMore();",
+            "}",
+        ]
+        counts = _make_counts()
+        _detect_error_no_throw(_ctx("\n".join(lines), "src/ErrorHandler.ts"), counts)
+        assert len(counts["console_error_no_throw"]) == 0
+
+    def test_skips_component_did_catch(self):
+        """console.error inside componentDidCatch context should be skipped."""
+        lines = [
+            "class ErrorBoundary extends React.Component {",
+            "  componentDidCatch(error, info) {",
+            "    // Log error to service",
+            "    console.error(error);",
+            "    doSomething();",
+            "    doMore();",
+            "    doEvenMore();",
+            "  }",
+            "}",
+        ]
+        counts = _make_counts()
+        _detect_error_no_throw(_ctx("\n".join(lines)), counts)
+        assert len(counts["console_error_no_throw"]) == 0
+
+    def test_skips_dev_only_block(self):
+        """console.error inside dev-only block should be skipped."""
+        lines = [
+            "function handle() {",
+            "  if (import.meta.env.DEV) {",
+            "    console.error('debug info');",
+            "    doSomething();",
+            "    doMore();",
+            "    doEvenMore();",
+            "  }",
+            "}",
+        ]
+        counts = _make_counts()
+        _detect_error_no_throw(_ctx("\n".join(lines)), counts)
+        assert len(counts["console_error_no_throw"]) == 0
+
+    def test_toast_counts_as_handled(self):
+        """toast() in following lines should count as handled."""
+        lines = [
+            "function handle() {",
+            "  console.error('bad');",
+            "  toast('Something went wrong');",
+            "}",
+        ]
+        counts = _make_counts()
+        _detect_error_no_throw(_ctx("\n".join(lines)), counts)
         assert len(counts["console_error_no_throw"]) == 0
 
 
 class TestDetectEmptyIfChains:
     def test_single_line_empty_if(self):
-        lines = ["if (x) { }"]
         counts = _make_counts()
-        _detect_empty_if_chains("test.ts", lines, counts)
+        _detect_empty_if_chains(_ctx("if (x) { }"), counts)
         assert len(counts["empty_if_chain"]) == 1
 
     def test_multi_line_empty_if(self):
-        lines = ["if (x) {", "}", ""]
         counts = _make_counts()
-        _detect_empty_if_chains("test.ts", lines, counts)
+        _detect_empty_if_chains(_ctx("if (x) {\n}\n"), counts)
         assert len(counts["empty_if_chain"]) == 1
 
 
 class TestDetectDeadUseeffects:
     def test_empty_useeffect_body(self):
-        lines = ["useEffect(() => {", "}, []);"]
+        content = "useEffect(() => {\n}, []);"
         counts = _make_counts()
-        _detect_dead_useeffects("test.ts", lines, counts)
+        _detect_dead_useeffects(_ctx(content), counts)
         assert len(counts["dead_useeffect"]) == 1
 
     def test_comment_only_useeffect_body(self):
-        lines = ["useEffect(() => {", "  // just a comment", "}, [dep]);"]
+        content = "useEffect(() => {\n  // just a comment\n}, [dep]);"
         counts = _make_counts()
-        _detect_dead_useeffects("test.ts", lines, counts)
+        _detect_dead_useeffects(_ctx(content), counts)
         assert len(counts["dead_useeffect"]) == 1
 
     def test_non_empty_useeffect_not_flagged(self):
-        lines = ["useEffect(() => {", "  setCount(1);", "}, [dep]);"]
+        content = "useEffect(() => {\n  setCount(1);\n}, [dep]);"
         counts = _make_counts()
-        _detect_dead_useeffects("test.ts", lines, counts)
+        _detect_dead_useeffects(_ctx(content), counts)
         assert len(counts["dead_useeffect"]) == 0
 
 
 class TestDetectSwallowedErrors:
     def test_catch_only_console_log(self):
         content = "try { x(); } catch (e) { console.log(e); }"
-        lines = content.splitlines()
         counts = _make_counts()
-        _detect_swallowed_errors("test.ts", content, lines, counts)
+        _detect_swallowed_errors(_ctx(content), counts)
         assert len(counts["swallowed_error"]) == 1
 
     def test_catch_with_rethrow_not_flagged(self):
         content = "try { x(); } catch (e) { console.error(e); throw e; }"
-        lines = content.splitlines()
         counts = _make_counts()
-        _detect_swallowed_errors("test.ts", content, lines, counts)
+        _detect_swallowed_errors(_ctx(content), counts)
         assert len(counts["swallowed_error"]) == 0
 
 
 class TestDetectWindowGlobals:
     def test_window_double_underscore(self):
-        lines = ["window.__debug = true;"]
-        line_state = {}
         counts = _make_counts()
-        _detect_window_globals("test.ts", lines, line_state, counts)
+        _detect_window_globals(_ctx("window.__debug = true;"), counts)
         assert len(counts["window_global"]) == 1
 
     def test_window_as_any(self):
-        lines = ["(window as any).__myVar = 'test';"]
-        line_state = {}
         counts = _make_counts()
-        _detect_window_globals("test.ts", lines, line_state, counts)
+        _detect_window_globals(_ctx("(window as any).__myVar = 'test';"), counts)
         assert len(counts["window_global"]) == 1
 
     def test_window_bracket_access(self):
-        lines = ["window['__myVar'] = 'test';"]
-        line_state = {}
         counts = _make_counts()
-        _detect_window_globals("test.ts", lines, line_state, counts)
+        _detect_window_globals(_ctx("window['__myVar'] = 'test';"), counts)
         assert len(counts["window_global"]) == 1
 
     def test_skips_lines_in_block_comment(self):
-        lines = ["window.__debug = true;"]
-        line_state = {0: "block_comment"}
+        content = "window.__debug = true;"
+        ctx = _FileContext(
+            filepath="test.ts",
+            content=content,
+            lines=content.splitlines(),
+            line_state={0: "block_comment"},
+        )
         counts = _make_counts()
-        _detect_window_globals("test.ts", lines, line_state, counts)
+        _detect_window_globals(ctx, counts)
         assert len(counts["window_global"]) == 0
 
 
@@ -337,7 +537,7 @@ class TestDetectCatchReturnDefault:
             "}\n"
         )
         counts = _make_counts()
-        _detect_catch_return_default("test.ts", content, counts)
+        _detect_catch_return_default(_ctx(content), counts)
         assert len(counts["catch_return_default"]) == 1
 
     def test_catch_return_single_field_not_flagged(self):
@@ -345,7 +545,7 @@ class TestDetectCatchReturnDefault:
             "try { return getData(); }\ncatch (e) {\n  return { success: false };\n}\n"
         )
         counts = _make_counts()
-        _detect_catch_return_default("test.ts", content, counts)
+        _detect_catch_return_default(_ctx(content), counts)
         assert len(counts["catch_return_default"]) == 0
 
     def test_catch_with_noop_callbacks(self):
@@ -356,46 +556,46 @@ class TestDetectCatchReturnDefault:
             "}\n"
         )
         counts = _make_counts()
-        _detect_catch_return_default("test.ts", content, counts)
+        _detect_catch_return_default(_ctx(content), counts)
         assert len(counts["catch_return_default"]) == 1
 
 
 class TestDetectMonsterFunctions:
     def test_flags_function_over_150_loc(self):
         body = "\n".join(f"  const x{i} = {i};" for i in range(160))
-        lines = ["function big() {", *body.splitlines(), "}"]
+        content = f"function big() {{\n{body}\n}}"
         counts = _make_counts()
-        _detect_monster_functions("test.ts", lines, counts)
+        _detect_monster_functions(_ctx(content), counts)
         assert len(counts["monster_function"]) == 1
 
     def test_skips_short_function(self):
-        lines = ["function small() {", "  return 1;", "}"]
+        content = "function small() {\n  return 1;\n}"
         counts = _make_counts()
-        _detect_monster_functions("test.ts", lines, counts)
+        _detect_monster_functions(_ctx(content), counts)
         assert len(counts["monster_function"]) == 0
 
 
-class TestDetectDeadFunctions:
+class TestDetectStubFunctions:
     def test_empty_function(self):
-        lines = ["function noop() {", "}"]
+        content = "function noop() {\n}"
         counts = _make_counts()
-        _detect_dead_functions("test.ts", lines, counts)
-        assert len(counts["dead_function"]) == 1
+        _detect_stub_functions(_ctx(content), counts)
+        assert len(counts["stub_function"]) == 1
 
     def test_return_null_function(self):
-        lines = ["function stub() {", "  return null;", "}"]
+        content = "function stub() {\n  return null;\n}"
         counts = _make_counts()
-        _detect_dead_functions("test.ts", lines, counts)
-        assert len(counts["dead_function"]) == 1
+        _detect_stub_functions(_ctx(content), counts)
+        assert len(counts["stub_function"]) == 1
 
     def test_function_with_body_not_flagged(self):
-        lines = ["function active() {", "  const x = calculate();", "  return x;", "}"]
+        content = "function active() {\n  const x = calculate();\n  return x;\n}"
         counts = _make_counts()
-        _detect_dead_functions("test.ts", lines, counts)
-        assert len(counts["dead_function"]) == 0
+        _detect_stub_functions(_ctx(content), counts)
+        assert len(counts["stub_function"]) == 0
 
     def test_decorated_function_skipped(self):
-        lines = ["@Controller()", "function handler() {", "}"]
+        content = "@Controller()\nfunction handler() {\n}"
         counts = _make_counts()
-        _detect_dead_functions("test.ts", lines, counts)
-        assert len(counts["dead_function"]) == 0
+        _detect_stub_functions(_ctx(content), counts)
+        assert len(counts["stub_function"]) == 0
