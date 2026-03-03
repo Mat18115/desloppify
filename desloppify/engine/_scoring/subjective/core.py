@@ -246,12 +246,12 @@ def append_subjective_dimensions(
             "score": round(float(score), 1),
             "tier": 4,
             "checks": SUBJECTIVE_CHECKS,
-            "issues": issue_count,
+            "failing": issue_count,
             "detectors": {
                 "subjective_assessment": {
                     "potential": SUBJECTIVE_CHECKS,
                     "pass_rate": round(pass_rate, 4),
-                    "issues": issue_count,
+                    "failing": issue_count,
                     "weighted_failures": round(SUBJECTIVE_CHECKS * (1 - pass_rate), 4),
                     "assessment_score": round(assessment_score, 1),
                     "placeholder": reset_pending or not has_assessment,

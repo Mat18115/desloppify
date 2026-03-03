@@ -33,7 +33,7 @@ def _unscored_state(*dim_keys: str) -> dict:
     assessments: dict = {}
     for dk in dim_keys:
         dim_scores[dk] = {
-            "score": 0, "strict": 0, "checks": 1, "issues": 0,
+            "score": 0, "strict": 0, "checks": 1, "failing": 0,
             "detectors": {
                 "subjective_assessment": {"dimension_key": dk, "placeholder": True},
             },
@@ -52,7 +52,7 @@ def _stale_state(*dim_keys: str, score: float = 50.0) -> dict:
     assessments: dict = {}
     for dk in dim_keys:
         dim_scores[dk] = {
-            "score": score, "strict": score, "checks": 1, "issues": 0,
+            "score": score, "strict": score, "checks": 1, "failing": 0,
             "detectors": {
                 "subjective_assessment": {"dimension_key": dk, "placeholder": False},
             },
@@ -75,7 +75,7 @@ def _under_target_state(*dim_keys: str, score: float = 70.0) -> dict:
     assessments: dict = {}
     for dk in dim_keys:
         dim_scores[dk] = {
-            "score": score, "strict": score, "checks": 1, "issues": 0,
+            "score": score, "strict": score, "checks": 1, "failing": 0,
             "detectors": {
                 "subjective_assessment": {"dimension_key": dk, "placeholder": False},
             },

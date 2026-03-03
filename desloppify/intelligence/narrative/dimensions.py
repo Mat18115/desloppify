@@ -39,7 +39,7 @@ def _lowest_dimensions(dim_scores: dict, potentials: dict) -> list[dict]:
     lowest = []
     for name, ds in sorted_dims[:3]:
         strict = ds.get("strict", ds["score"])
-        issues = ds.get("issues", 0)
+        issues = ds.get("failing", 0)
         impact = _dominant_detector_impact(
             dim_scores=dim_scores,
             detectors=ds.get("detectors", {}),
@@ -49,7 +49,7 @@ def _lowest_dimensions(dim_scores: dict, potentials: dict) -> list[dict]:
         entry = {
             "name": name,
             "strict": round(strict, 1),
-            "issues": issues,
+            "failing": issues,
             "impact": round(impact, 1),
         }
         if is_subjective:
@@ -139,7 +139,7 @@ def _dominant_detector_impact(
     }
     impact = 0.0
     for detector_name, detector_data in detectors.items():
-        issue_count = int(detector_data.get("issues", 0) or 0)
+        issue_count = int(detector_data.get("failing", 0) or 0)
         if issue_count <= 0:
             continue
         detector_impact = compute_score_impact(

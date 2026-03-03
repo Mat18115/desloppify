@@ -281,7 +281,7 @@ def build_subjective_items(
         open_review = sum(review_open_by_dim.get(alias, 0) for alias in aliases)
         is_unassessed = bool(entry.get("placeholder")) or (
             name in unassessed_dims
-            or (strict_val <= 0.0 and int(entry.get("issues", 0)) == 0)
+            or (strict_val <= 0.0 and int(entry.get("failing", 0)) == 0)
         )
         is_stale = bool(entry.get("stale"))
         # If review findings already exist for this dimension, triage/fix them
@@ -302,7 +302,7 @@ def build_subjective_items(
                 "detail": {
                     "dimension_name": name,
                     "dimension": dim_key,
-                    "issues": int(entry.get("issues", 0)),
+                    "failing": int(entry.get("failing", 0)),
                     "strict_score": strict_val,
                     "open_review_findings": open_review,
                     "cli_keys": cli_keys,

@@ -51,7 +51,7 @@ def test_scorecard_payload_includes_subjective_rows():
                 "score": 98.0,
                 "strict": 98.0,
                 "checks": 10,
-                "issues": 1,
+                "failing": 1,
                 "tier": 3,
                 "detectors": {"structural": {}},
             },
@@ -59,13 +59,13 @@ def test_scorecard_payload_includes_subjective_rows():
                 "score": 96.0,
                 "strict": 95.0,
                 "checks": 50,
-                "issues": 2,
+                "failing": 2,
                 "tier": 4,
                 "detectors": {
                     "subjective_assessment": {
                         "potential": 50,
                         "pass_rate": 0.96,
-                        "issues": 2,
+                        "failing": 2,
                         "weighted_failures": 2.0,
                         "components": [],
                     }

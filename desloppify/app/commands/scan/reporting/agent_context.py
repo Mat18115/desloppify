@@ -109,7 +109,7 @@ def _print_dimension_table(state: dict[str, Any], dim_scores: dict[str, Any]) ->
     for name, data in sorted(mechanical, key=lambda item: item[0]):
         score = data.get("score", 100)
         strict = data.get("strict", score)
-        issues = data.get("issues", 0)
+        issues = data.get("failing", 0)
         tier = data.get("tier", "")
         action = registry_mod.dimension_action_type(name)
         print(
@@ -120,7 +120,7 @@ def _print_dimension_table(state: dict[str, Any], dim_scores: dict[str, Any]) ->
         for name, data in sorted(subjective, key=lambda item: item[0]):
             score = data.get("score", 100)
             strict = data.get("strict", score)
-            issues = data.get("issues", 0)
+            issues = data.get("failing", 0)
             tier = data.get("tier", "")
             print(
                 f"| {name} | {score:.1f}% | {strict:.1f}% | {issues} | T{tier} | review |"

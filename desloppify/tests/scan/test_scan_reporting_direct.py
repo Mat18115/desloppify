@@ -427,14 +427,14 @@ def test_print_llm_summary_respects_env_and_includes_dimension_table(
             "File health": {
                 "score": 80.0,
                 "strict": 70.0,
-                "issues": 2,
+                "failing": 2,
                 "checks": 1,
                 "tier": 1,
             },
             "Naming quality": {
                 "score": 75.0,
                 "strict": 65.0,
-                "issues": 1,
+                "failing": 1,
                 "checks": 1,
                 "tier": 4,
             },
@@ -480,7 +480,7 @@ def test_show_scorecard_dimensions_and_dimension_hints(monkeypatch, capsys):
                     "score": 92.0,
                     "strict": 90.0,
                     "checks": 100,
-                    "issues": 10,
+                    "failing": 10,
                     "detectors": {},
                 },
             ),
@@ -490,7 +490,7 @@ def test_show_scorecard_dimensions_and_dimension_hints(monkeypatch, capsys):
                     "score": 88.0,
                     "strict": 85.0,
                     "checks": 10,
-                    "issues": 3,
+                    "failing": 3,
                     "detectors": {"subjective_assessment": {}},
                 },
             ),
@@ -562,7 +562,7 @@ def test_show_scorecard_dimensions_and_dimension_hints(monkeypatch, capsys):
                 {
                     "score": 78.0,
                     "strict": 78.0,
-                    "issues": 0,
+                    "failing": 0,
                     "checks": 10,
                     "detectors": {"subjective_assessment": {}},
                 },
@@ -572,7 +572,7 @@ def test_show_scorecard_dimensions_and_dimension_hints(monkeypatch, capsys):
                 {
                     "score": 72.0,
                     "strict": 72.0,
-                    "issues": 0,
+                    "failing": 0,
                     "checks": 10,
                     "detectors": {"subjective_assessment": {}},
                 },
@@ -600,13 +600,13 @@ def test_show_scorecard_dimensions_and_dimension_hints(monkeypatch, capsys):
             "High Level Elegance": {
                 "score": 78.0,
                 "strict": 78.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
             "Mid Level Elegance": {
                 "score": 72.0,
                 "strict": 72.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         },
@@ -623,7 +623,7 @@ def test_show_scorecard_dimensions_and_dimension_hints(monkeypatch, capsys):
             "High Level Elegance": {
                 "score": 96.0,
                 "strict": 96.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         },
@@ -680,14 +680,14 @@ def test_show_score_model_breakdown_prints_recipe_and_drags(capsys):
                 "score": 100.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             },
             "High elegance": {
                 "score": 80.0,
                 "tier": 4,
                 "checks": 10,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         }
@@ -723,7 +723,7 @@ def test_subjective_rerun_command_builds_dimension_and_holistic_variants():
 
 def test_subjective_rerun_command_prefers_open_review_queue_when_issues_exist():
     command = scan_reporting_dimensions_mod.subjective_rerun_command(
-        [{"cli_keys": ["naming_quality"], "issues": 2}],
+        [{"cli_keys": ["naming_quality"], "failing": 2}],
         max_items=5,
     )
     assert command == "`desloppify show review --status open`"
@@ -743,7 +743,7 @@ def test_subjective_integrity_followup_handles_none_threshold_and_target():
                 "name": "Naming quality",
                 "score": 96.0,
                 "strict": 96.0,
-                "issues": 0,
+                "failing": 0,
                 "placeholder": False,
                 "cli_keys": ["naming_quality"],
             }
@@ -777,7 +777,7 @@ def test_show_subjective_paths_prioritizes_integrity_gap(monkeypatch, capsys):
             "High elegance": {
                 "score": 0.0,
                 "strict": 0.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         },
@@ -798,7 +798,7 @@ def test_show_subjective_paths_prints_out_of_scope_subjective_breakdown(monkeypa
                 {
                     "score": 100.0,
                     "strict": 100.0,
-                    "issues": 0,
+                    "failing": 0,
                     "checks": 10,
                     "detectors": {"subjective_assessment": {}},
                 },
@@ -828,7 +828,7 @@ def test_show_subjective_paths_prints_out_of_scope_subjective_breakdown(monkeypa
             "Naming quality": {
                 "score": 100.0,
                 "strict": 100.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             }
         },
@@ -860,13 +860,13 @@ def test_show_subjective_paths_shows_target_match_reset_warning(monkeypatch, cap
             "Naming quality": {
                 "score": 0.0,
                 "strict": 0.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
             "Logic clarity": {
                 "score": 0.0,
                 "strict": 0.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         },
@@ -890,7 +890,7 @@ def test_show_subjective_paths_does_not_swallow_stale_only_entries(monkeypatch, 
                 "name": "High Level Elegance",
                 "score": 97.0,
                 "strict": 97.0,
-                "issues": 0,
+                "failing": 0,
                 "placeholder": False,
                 "stale": True,
                 "cli_keys": ["high_level_elegance"],
@@ -903,7 +903,7 @@ def test_show_subjective_paths_does_not_swallow_stale_only_entries(monkeypatch, 
             "High Level Elegance": {
                 "score": 97.0,
                 "strict": 97.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         },

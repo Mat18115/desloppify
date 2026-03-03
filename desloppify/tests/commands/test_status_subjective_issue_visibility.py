@@ -11,7 +11,7 @@ def _subjective_dim(score: float, strict: float, dimension_key: str) -> dict:
         "score": score,
         "strict": strict,
         "checks": 0,
-        "issues": 0,
+        "failing": 0,
         "tier": 4,
         "detectors": {
             "subjective_assessment": {

@@ -69,7 +69,7 @@ def scorecard_dimension_entries(
         is_subjective = subjective_meta is not None
         score = float(data.get("score", 0.0))
         strict = float(data.get("strict", score))
-        issues = int(data.get("issues", 0))
+        issues = int(data.get("failing", 0))
         checks = int(data.get("checks", 0))
         placeholder = bool(subjective_meta.get("placeholder")) if subjective_meta else False
         not_scanned = bool(
@@ -90,7 +90,7 @@ def scorecard_dimension_entries(
                 "name": name,
                 "score": score,
                 "strict": strict,
-                "issues": issues,
+                "failing": issues,
                 "checks": checks,
                 "subjective": is_subjective,
                 "placeholder": placeholder,

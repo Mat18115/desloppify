@@ -1128,7 +1128,7 @@ class TestComputeHeadline:
             phase="maintenance",
             dimensions={
                 "lowest_dimensions": [
-                    {"name": "Org", "issues": 3, "impact": 5.0, "strict": 80}
+                    {"name": "Org", "failing": 3, "impact": 5.0, "strict": 80}
                 ]
             },
             debt={"overall_gap": 0},
@@ -1146,9 +1146,9 @@ class TestComputeHeadline:
             phase="first_scan",
             dimensions={
                 "lowest_dimensions": [
-                    {"name": "A", "issues": 1, "impact": 1.0, "strict": 90},
-                    {"name": "B", "issues": 2, "impact": 2.0, "strict": 80},
-                    {"name": "C", "issues": 3, "impact": 3.0, "strict": 70},
+                    {"name": "A", "failing": 1, "impact": 1.0, "strict": 90},
+                    {"name": "B", "failing": 2, "impact": 2.0, "strict": 80},
+                    {"name": "C", "failing": 3, "impact": 3.0, "strict": 70},
                 ]
             },
             debt={"overall_gap": 0},
@@ -1208,7 +1208,7 @@ class TestComputeHeadline:
         ]
         dimensions = {
             "lowest_dimensions": [
-                {"name": "Organization", "issues": 10, "impact": 5.0, "strict": 60.0},
+                {"name": "Organization", "failing": 10, "impact": 5.0, "strict": 60.0},
             ],
         }
         result = _compute_headline(
@@ -1235,7 +1235,7 @@ class TestComputeHeadline:
         ]
         dimensions = {
             "lowest_dimensions": [
-                {"name": "Organization", "issues": 10, "impact": 5.0, "strict": 60.0},
+                {"name": "Organization", "failing": 10, "impact": 5.0, "strict": 60.0},
             ],
         }
         result = _compute_headline(
@@ -1257,7 +1257,7 @@ class TestComputeHeadline:
         """Lowest dimension with impact > 0 generates a leverage headline."""
         dimensions = {
             "lowest_dimensions": [
-                {"name": "Import hygiene", "issues": 20, "impact": 8.5, "strict": 70.0},
+                {"name": "Import hygiene", "failing": 20, "impact": 8.5, "strict": 70.0},
             ],
         }
         result = _compute_headline(
@@ -1297,7 +1297,7 @@ class TestComputeHeadline:
             "lowest_dimensions": [
                 {
                     "name": "Debug cleanliness",
-                    "issues": 15,
+                    "failing": 15,
                     "impact": 0,
                     "strict": 55.0,
                 },
@@ -2211,9 +2211,9 @@ class TestComputeNarrativeContract:
                     "score": 78.0,
                     "strict": 72.0,
                     "tier": 2,
-                    "issues": 4,
+                    "failing": 4,
                     "checks": 10,
-                    "detectors": {"smells": {"issues": 4}},
+                    "detectors": {"smells": {"failing": 4}},
                 },
             },
             "stats": {"open": 4, "total": 6},

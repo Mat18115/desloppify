@@ -105,7 +105,7 @@ def all_subjective_entries(
             assessment_meta.get("placeholder")
             or (
                 data.get("score", 0) == 0
-                and data.get("issues", 0) == 0
+                and data.get("failing", 0) == 0
                 and data.get("checks", 0) == 0
             )
         )
@@ -121,7 +121,7 @@ def all_subjective_entries(
                 "score": score,
                 "strict": strict,
                 "checks": int(data.get("checks", 0) or 0),
-                "issues": int(data.get("issues", 0) or 0),
+                "failing": int(data.get("failing", 0) or 0),
                 "tier": int(data.get("tier", 4) or 4),
                 "placeholder": placeholder,
                 "stale": stale,
@@ -166,7 +166,7 @@ def scorecard_subjective_entries(
             assessment_meta.get("placeholder")
             or (
                 data.get("score", 0) == 0
-                and data.get("issues", 0) == 0
+                and data.get("failing", 0) == 0
                 and data.get("checks", 0) == 0
             )
         )
@@ -182,7 +182,7 @@ def scorecard_subjective_entries(
                 "score": score,
                 "strict": strict,
                 "checks": int(data.get("checks", 0) or 0),
-                "issues": int(data.get("issues", 0) or 0),
+                "failing": int(data.get("failing", 0) or 0),
                 "tier": int(data.get("tier", 4) or 4),
                 "placeholder": placeholder,
                 "stale": stale,
@@ -213,7 +213,7 @@ def scorecard_dimensions_payload(
             "score": score,
             "strict": strict,
             "checks": int(data.get("checks", 0) or 0),
-            "issues": int(data.get("issues", 0) or 0),
+            "failing": int(data.get("failing", 0) or 0),
             "tier": int(
                 data.get("tier", 4 if subjective else 3) or (4 if subjective else 3)
             ),

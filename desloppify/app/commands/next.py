@@ -7,6 +7,12 @@ import argparse
 from desloppify import state as state_mod
 import desloppify.app.commands.next_parts.output as next_output_mod
 import desloppify.app.commands.next_parts.render as next_render_mod
+import desloppify.app.commands.next_parts.render_nudges as next_nudges_mod
+from desloppify.app.commands.next_parts.render_support import (
+    render_queue_header as _render_queue_header,
+    scorecard_subjective as _scorecard_subjective_impl,
+    show_empty_queue as _show_empty_queue,
+)
 from desloppify.app.commands.helpers.lang import resolve_lang
 from desloppify.app.commands.helpers.query import write_query
 from desloppify.app.commands.helpers.queue_progress import (
@@ -41,7 +47,7 @@ def _scorecard_subjective(
     dim_scores: dict,
 ) -> list[dict]:
     """Return scorecard-aligned subjective entries for current dimension scores."""
-    return next_render_mod.scorecard_subjective(state, dim_scores)
+    return _scorecard_subjective_impl(state, dim_scores)
 
 
 def _low_subjective_dimensions(
@@ -61,7 +67,7 @@ def _low_subjective_dimensions(
                 (
                     str(entry.get("name", "Subjective")),
                     strict_val,
-                    int(entry.get("issues", 0)),
+                    int(entry.get("failing", 0)),
                 )
             )
     low.sort(key=lambda item: item[1])
@@ -253,9 +259,9 @@ def _get_items(args, state: dict, config: dict) -> None:
     )
     queue_total = breakdown.queue_total if breakdown else 0
 
-    next_render_mod.render_queue_header(queue, explain)
+    _render_queue_header(queue, explain)
     strict_score = state_mod.get_strict_score(state)
-    if next_render_mod.show_empty_queue(
+    if _show_empty_queue(
         queue,
         strict_score,
         plan_start_strict=plan_start_strict,
@@ -270,9 +276,9 @@ def _get_items(args, state: dict, config: dict) -> None:
         potentials=potentials, plan=plan_data,
         cluster_filter=effective_cluster,
     )
-    next_render_mod.render_single_item_resolution_hint(items)
-    next_render_mod.render_uncommitted_reminder(plan_data)
-    next_render_mod.render_followup_nudges(
+    next_nudges_mod.render_single_item_resolution_hint(items)
+    next_nudges_mod.render_uncommitted_reminder(plan_data)
+    next_nudges_mod.render_followup_nudges(
         state,
         dim_scores,
         findings_scoped,

@@ -253,14 +253,14 @@ class TestStatusSubjectiveFollowup:
                 "score": 0.0,
                 "strict": 0.0,
                 "tier": 4,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
             "Logic clarity": {
                 "score": 0.0,
                 "strict": 0.0,
                 "tier": 4,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         }

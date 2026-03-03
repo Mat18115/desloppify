@@ -542,7 +542,7 @@ def _unscored_state(*dim_keys: str) -> dict:
             "score": 0,
             "strict": 0,
             "checks": 1,
-            "issues": 0,
+            "failing": 0,
             "detectors": {
                 "subjective_assessment": {
                     "dimension_key": dim_key,
@@ -572,7 +572,7 @@ def _stale_state(*dim_keys: str, score: float = 50.0) -> dict:
             "score": score,
             "strict": score,
             "checks": 1,
-            "issues": 0,
+            "failing": 0,
             "detectors": {
                 "subjective_assessment": {
                     "dimension_key": dim_key,
@@ -766,7 +766,7 @@ def _under_target_state(*dim_keys: str, score: float = 70.0) -> dict:
             "score": score,
             "strict": score,
             "checks": 1,
-            "issues": 0,
+            "failing": 0,
             "detectors": {
                 "subjective_assessment": {
                     "dimension_key": dim_key,

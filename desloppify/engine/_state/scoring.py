@@ -354,7 +354,7 @@ def _update_objective_health(
             strict_score=strict_scores[name]["score"],
             verified_strict_score=verified_strict_scores[name]["score"],
             checks=lenient_scores[name]["checks"],
-            issues=lenient_scores[name]["issues"],
+            failing=lenient_scores[name]["failing"],
             tier=lenient_scores[name]["tier"],
             detectors=lenient_scores[name].get("detectors", {}),
         )

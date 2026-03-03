@@ -10,6 +10,7 @@ import desloppify.app.commands.move.move_reporting as move_reporting
 import desloppify.app.commands.move.move as move_cmd_mod
 import desloppify.app.commands.next_parts.output as next_output
 import desloppify.app.commands.next_parts.render as next_render
+import desloppify.app.commands.next_parts.render_support as next_render_support
 import desloppify.app.commands.plan_cmd as plan_cmd
 import desloppify.app.commands.registry as cmd_registry
 import desloppify.app.commands.review.batch_core as review_batch_core
@@ -119,7 +120,7 @@ def test_smoke_commands():
         scan_workflow.merge_scan_results,
         next_output.serialize_item,
         next_output.build_query_payload,
-        next_render.render_queue_header,
+        next_render_support.render_queue_header,
         review_batch_core.merge_batch_results,
         review_batches.do_run_batches,
         review_import.do_import,

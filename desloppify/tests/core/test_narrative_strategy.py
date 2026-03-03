@@ -121,15 +121,15 @@ class TestAnalyzeDimensions:
                 "score": 100,
                 "strict": 100,
                 "tier": 1,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             },
             "Code quality": {
                 "score": 80,
                 "strict": 75,
                 "tier": 3,
-                "issues": 20,
-                "detectors": {"smells": {"issues": 20}},
+                "failing": 20,
+                "detectors": {"smells": {"failing": 20}},
             },
         }
         result = _analyze_dimensions(dim_scores, [], empty_state)

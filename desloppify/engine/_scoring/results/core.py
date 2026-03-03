@@ -49,7 +49,7 @@ def compute_dimension_scores_by_mode(
         totals = {
             mode: {
                 "checks": 0,
-                "issues": 0,
+                "failing": 0,
                 "weighted_failures": 0.0,
                 "detectors": {},
             }
@@ -65,12 +65,12 @@ def compute_dimension_scores_by_mode(
             for mode in SCORING_MODES:
                 pass_rate, issues, weighted = detector_stats[mode]
                 totals[mode]["checks"] += potential
-                totals[mode]["issues"] += issues
+                totals[mode]["failing"] += issues
                 totals[mode]["weighted_failures"] += weighted
                 totals[mode]["detectors"][detector] = {
                     "potential": potential,
                     "pass_rate": pass_rate,
-                    "issues": issues,
+                    "failing": issues,
                     "weighted_failures": weighted,
                 }
 
@@ -89,7 +89,7 @@ def compute_dimension_scores_by_mode(
                 "score": round(dim_score, 1),
                 "tier": dim.tier,
                 "checks": total_checks,
-                "issues": totals[mode]["issues"],
+                "failing": totals[mode]["failing"],
                 "detectors": totals[mode]["detectors"],
             }
 

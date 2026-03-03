@@ -346,11 +346,11 @@ def _mk_dim(
     *,
     strict: float | None = None,
     checks: int = 10,
-    issues: int = 0,
+    failing: int = 0,
     subjective: bool = True,
 ) -> dict:
     detectors = (
-        {"subjective_assessment": {"issues": issues}}
+        {"subjective_assessment": {"failing": failing}}
         if subjective
         else {"structural": {}}
     )
@@ -358,7 +358,7 @@ def _mk_dim(
         "score": score,
         "strict": score if strict is None else strict,
         "checks": checks,
-        "issues": issues,
+        "failing": failing,
         "tier": 4 if subjective else 3,
         "detectors": detectors,
     }
@@ -377,9 +377,9 @@ class TestScorecardDimensionPolicy:
     def test_collapse_elegance_dimensions_averages_components(self):
         dims = [
             ("Naming quality", _mk_dim(90, strict=90)),
-            ("High elegance", _mk_dim(80, strict=70, issues=1)),
-            ("Mid elegance", _mk_dim(60, strict=50, issues=2)),
-            ("Low elegance", _mk_dim(100, strict=90, issues=0)),
+            ("High elegance", _mk_dim(80, strict=70, failing=1)),
+            ("Mid elegance", _mk_dim(60, strict=50, failing=2)),
+            ("Low elegance", _mk_dim(100, strict=90, failing=0)),
         ]
         collapsed = collapse_elegance_dimensions(dims, lang_key="python")
         names = [name for name, _ in collapsed]
@@ -390,7 +390,7 @@ class TestScorecardDimensionPolicy:
         combined = dict(collapsed)["Elegance"]
         assert combined["score"] == 80.0
         assert combined["strict"] == 70.0
-        assert combined["issues"] == 3
+        assert combined["failing"] == 3
 
     def test_limit_scorecard_dimensions_python_drops_highest_score_extra(self):
         """When budget forces truncation, extras are sorted ascending by score

@@ -44,6 +44,7 @@ def _invalidate_detector_names_cache() -> None:
 
 on_detector_registered(_invalidate_detector_names_cache)
 
+
 def create_parser():
     """Return the top-level argparse parser."""
     return _create_parser(langs=available_langs(), detector_names=_get_detector_names())

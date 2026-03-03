@@ -118,7 +118,7 @@ def _compute_headline_inner(
         top = lowest[0]
         return (
             f"{top['name']} is your biggest lever: "
-            f"{top['issues']} items → +{top['impact']} pts"
+            f"{top['failing']} items → +{top['impact']} pts"
         )
 
     # Gap callout

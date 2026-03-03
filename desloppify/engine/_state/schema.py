@@ -94,7 +94,7 @@ class DimensionScore(TypedDict, total=False):
     score: float
     strict: float
     checks: int
-    issues: int
+    failing: int
     tier: int
     detectors: dict[str, Any]
 

@@ -103,7 +103,7 @@ def _plan_dimension_table(state: PlanState) -> list[str]:
         static_names.add(dim.name)
         rendered_names.add(dim.name)
         checks = ds.get("checks", 0)
-        issues = ds.get("issues", 0)
+        issues = ds.get("failing", 0)
         score_val = ds.get("score", 100)
         strict_val = ds.get("strict", score_val)
         bold = "**" if score_val < 93 else ""
@@ -133,7 +133,7 @@ def _plan_dimension_table(state: PlanState) -> list[str]:
 
     for name, ds in custom_non_subjective_rows:
         checks = ds.get("checks", 0)
-        issues = ds.get("issues", 0)
+        issues = ds.get("failing", 0)
         score_val = ds.get("score", 100)
         strict_val = ds.get("strict", score_val)
         tier = int(ds.get("tier", 3) or 3)
@@ -162,7 +162,7 @@ def _plan_dimension_table(state: PlanState) -> list[str]:
     if subjective_rows:
         lines.append("| **Subjective Measures (matches scorecard.png)** | | | | | | |")
         for name, ds in subjective_rows:
-            issues = ds.get("issues", 0)
+            issues = ds.get("failing", 0)
             score_val = ds.get("score", 100)
             strict_val = ds.get("strict", score_val)
             tier = ds.get("tier", 4)

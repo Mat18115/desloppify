@@ -51,7 +51,7 @@ class DimensionEntry(TypedDict, total=False):
 
     name: str
     strict: float
-    issues: int
+    failing: int
     impact: float
     subjective: bool
     impact_description: str

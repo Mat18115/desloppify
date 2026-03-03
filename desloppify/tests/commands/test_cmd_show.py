@@ -274,13 +274,13 @@ class TestShowSubjectiveFollowup:
                 "Naming quality": {
                     "score": 0.0,
                     "strict": 0.0,
-                    "issues": 0,
+                    "failing": 0,
                     "detectors": {"subjective_assessment": {}},
                 },
                 "Logic clarity": {
                     "score": 0.0,
                     "strict": 0.0,
-                    "issues": 0,
+                    "failing": 0,
                     "detectors": {"subjective_assessment": {}},
                 },
             },
@@ -400,7 +400,7 @@ class TestCmdShowBackendIntegration:
                     "Naming quality": {
                         "score": 88.0,
                         "strict": 85.0,
-                        "issues": 2,
+                        "failing": 2,
                         "detectors": {"subjective_assessment": {}},
                     },
                 },
@@ -444,7 +444,7 @@ class TestCmdShowBackendIntegration:
                     "Naming quality": {
                         "score": 90.0,
                         "strict": 88.0,
-                        "issues": 1,
+                        "failing": 1,
                         "detectors": {"subjective_assessment": {}},
                     },
                 },
@@ -489,7 +489,7 @@ class TestCmdShowBackendIntegration:
                     "Security": {
                         "score": 100.0,
                         "strict": 100.0,
-                        "issues": 0,
+                        "failing": 0,
                         "detectors": {"security": {}, "cycles": {}},
                     },
                 },

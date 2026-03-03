@@ -67,7 +67,7 @@ def is_unassessed_subjective_placeholder(data: dict) -> bool:
     return (
         "subjective_assessment" in data.get("detectors", {})
         and data.get("score", 0) == 0
-        and data.get("issues", 0) == 0
+        and data.get("failing", 0) == 0
     )
 
 
@@ -102,7 +102,7 @@ def collapse_elegance_dimensions(
         1,
     )
     checks_total = sum(int(data.get("checks", 0)) for _, data in elegance_rows)
-    issues_total = sum(int(data.get("issues", 0)) for _, data in elegance_rows)
+    issues_total = sum(int(data.get("failing", 0)) for _, data in elegance_rows)
     tier = max(int(data.get("tier", 4)) for _, data in elegance_rows)
     placeholder_flags = [
         bool(
@@ -122,13 +122,13 @@ def collapse_elegance_dimensions(
         "score": score_avg,
         "strict": strict_avg,
         "checks": checks_total,
-        "issues": issues_total,
+        "failing": issues_total,
         "tier": tier,
         "detectors": {
             "subjective_assessment": {
                 "potential": checks_total,
                 "pass_rate": pass_rate,
-                "issues": issues_total,
+                "failing": issues_total,
                 "weighted_failures": round(checks_total * (1 - pass_rate), 4),
                 "components": [name for name, _ in elegance_rows],
             }

@@ -719,7 +719,7 @@ class TestShowPostScanAnalysis:
                 "Naming quality": {
                     "score": 88.0,
                     "strict": 88.0,
-                    "detectors": {"subjective_assessment": {"issues": 2}},
+                    "detectors": {"subjective_assessment": {"failing": 2}},
                 },
             },
         }

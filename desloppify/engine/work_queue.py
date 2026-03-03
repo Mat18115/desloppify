@@ -58,6 +58,11 @@ from desloppify.engine._work_queue.ranking import (
     subjective_score_value,
 )
 
+# --- plan_order: plan-aware reordering and cluster collapse ----------------
+from desloppify.engine._work_queue.plan_order import (
+    collapse_clusters,
+)
+
 __all__ = [
     # context
     "QueueContext",
@@ -87,6 +92,8 @@ __all__ = [
     "item_explain",
     "item_sort_key",
     "subjective_score_value",
+    # plan_order
+    "collapse_clusters",
     # issues
     "expire_stale_holistic",
     "impact_label",

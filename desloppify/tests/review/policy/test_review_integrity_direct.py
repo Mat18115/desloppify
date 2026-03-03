@@ -63,19 +63,19 @@ def test_unassessed_subjective_dimensions_finds_zero_placeholder_dimensions():
         "High elegance": {
             "score": 0.0,
             "strict": 0.0,
-            "issues": 0,
+            "failing": 0,
             "detectors": {"subjective_assessment": {}},
         },
         "Mid elegance": {
             "score": 70.0,
             "strict": 70.0,
-            "issues": 1,
+            "failing": 1,
             "detectors": {"subjective_assessment": {}},
         },
         "File health": {
             "score": 99.0,
             "strict": 99.0,
-            "issues": 0,
+            "failing": 0,
             "detectors": {},
         },
     }

@@ -86,7 +86,7 @@ def subjective_rerun_command(
     # If dimensions already have open review issues, route to the review queue
     # instead of prompting a blocked rerun.
     if any(
-        int(entry.get("issues", 0) or 0) > 0
+        int(entry.get("failing", 0) or 0) > 0
         for entry in items[:max_items]
         if isinstance(entry, dict)
     ):
@@ -146,7 +146,7 @@ def subjective_entries_for_dimension_keys(
                 "name": _subjective_display_name_from_key(key),
                 "score": 0.0,
                 "strict": 0.0,
-                "issues": 0,
+                "failing": 0,
                 "placeholder": False,
                 "cli_keys": [key],
             }

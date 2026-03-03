@@ -54,7 +54,7 @@ def test_review_finding_uses_natural_tier():
     state = _state(
         [review, mechanical],
         dimension_scores={
-            "Naming quality": {"score": 94.0, "strict": 94.0, "issues": 1}
+            "Naming quality": {"score": 94.0, "strict": 94.0, "failing": 1}
         },
     )
 
@@ -78,7 +78,7 @@ def test_review_items_ranked_alongside_mechanical():
     state = _state(
         [urgent, review],
         dimension_scores={
-            "Naming quality": {"score": 92.0, "strict": 92.0, "issues": 2}
+            "Naming quality": {"score": 92.0, "strict": 92.0, "failing": 2}
         },
     )
 
@@ -107,8 +107,8 @@ def test_review_items_sort_by_issue_weight_within_tier():
     state = _state(
         [standard, holistic],
         dimension_scores={
-            "Naming quality": {"score": 92.0, "strict": 92.0, "issues": 2},
-            "Logic clarity": {"score": 88.0, "strict": 88.0, "issues": 3},
+            "Naming quality": {"score": 92.0, "strict": 92.0, "failing": 2},
+            "Logic clarity": {"score": 88.0, "strict": 88.0, "failing": 3},
         },
     )
 
@@ -125,8 +125,8 @@ def test_queue_contains_mechanical_and_synthetic_subjective_items():
     state = _state(
         [],
         dimension_scores={
-            "Naming quality": {"score": 94.0, "strict": 94.0, "issues": 2},
-            "Logic clarity": {"score": 100.0, "strict": 100.0, "issues": 0},
+            "Naming quality": {"score": 94.0, "strict": 94.0, "failing": 2},
+            "Logic clarity": {"score": 100.0, "strict": 100.0, "failing": 0},
         },
     )
 
@@ -150,7 +150,7 @@ def test_subjective_items_do_not_starve_objective_queue_head():
             review,
         ],
         dimension_scores={
-            "Naming quality": {"score": 92.0, "strict": 92.0, "issues": 3},
+            "Naming quality": {"score": 92.0, "strict": 92.0, "failing": 3},
         },
     )
 
@@ -170,7 +170,7 @@ def test_impact_sort_with_count_limit():
             _finding("security::src/a.py::x", detector="security", tier=1, confidence="high"),
         ],
         dimension_scores={
-            "Naming quality": {"score": 80.0, "strict": 80.0, "issues": 5},
+            "Naming quality": {"score": 80.0, "strict": 80.0, "failing": 5},
         },
     )
 
@@ -203,8 +203,8 @@ def test_subjective_items_respect_target_threshold():
     state = _state(
         [],
         dimension_scores={
-            "Naming quality": {"score": 94.0, "strict": 94.0, "issues": 2},
-            "AI generated debt": {"score": 96.0, "strict": 96.0, "issues": 1},
+            "Naming quality": {"score": 94.0, "strict": 94.0, "failing": 2},
+            "AI generated debt": {"score": 96.0, "strict": 96.0, "failing": 1},
         },
     )
 
@@ -226,7 +226,7 @@ def test_subjective_item_uses_show_review_when_matching_review_findings_exist():
     state = _state(
         [review],
         dimension_scores={
-            "Mid elegance": {"score": 70.0, "strict": 70.0, "issues": 1},
+            "Mid elegance": {"score": 70.0, "strict": 70.0, "failing": 1},
         },
     )
 
@@ -254,7 +254,7 @@ def test_stale_subjective_item_uses_show_review_when_matching_review_findings_ex
             "Init coupling": {
                 "score": 42.2,
                 "strict": 42.2,
-                "issues": 1,
+                "failing": 1,
                 "checks": 1,
                 "detectors": {
                     "subjective_assessment": {
@@ -287,7 +287,7 @@ def test_unassessed_subjective_item_points_to_holistic_refresh():
     state = _state(
         [],
         dimension_scores={
-            "High elegance": {"score": 0.0, "strict": 0.0, "issues": 0},
+            "High elegance": {"score": 0.0, "strict": 0.0, "failing": 0},
         },
     )
 
@@ -370,7 +370,7 @@ def test_legacy_string_detail_does_not_crash_queue_build():
     state = _state(
         [review, weird],
         dimension_scores={
-            "Naming quality": {"score": 92.0, "strict": 92.0, "issues": 1}
+            "Naming quality": {"score": 92.0, "strict": 92.0, "failing": 1}
         },
     )
     queue = build_work_queue(state, count=None, include_subjective=False)
@@ -387,7 +387,7 @@ def test_subjective_threshold_clamped_to_valid_range():
     state = _state(
         [],
         dimension_scores={
-            "Naming quality": {"score": 50.0, "strict": 50.0, "issues": 1},
+            "Naming quality": {"score": 50.0, "strict": 50.0, "failing": 1},
         },
     )
     # threshold=-10 clamps to 0.0 -> score 50 >= 0 -> item excluded
@@ -520,7 +520,7 @@ def test_chronic_mode_excludes_subjective_items():
     state = _state(
         [],
         dimension_scores={
-            "Naming quality": {"score": 50.0, "strict": 50.0, "issues": 1},
+            "Naming quality": {"score": 50.0, "strict": 50.0, "failing": 1},
         },
     )
 
@@ -546,7 +546,7 @@ def test_stale_subjective_gated_when_objective_backlog_exists():
             "Naming quality": {
                 "score": 70.0,
                 "strict": 70.0,
-                "issues": 1,
+                "failing": 1,
                 "detectors": {
                     "subjective_assessment": {"dimension_key": "naming_quality"},
                 },
@@ -578,7 +578,7 @@ def test_stale_subjective_appear_when_no_objective_backlog():
             "Naming quality": {
                 "score": 70.0,
                 "strict": 70.0,
-                "issues": 1,
+                "failing": 1,
                 "detectors": {
                     "subjective_assessment": {"dimension_key": "naming_quality"},
                 },
@@ -613,7 +613,7 @@ def test_unassessed_subjective_appear_with_objective_backlog():
             "Naming quality": {
                 "score": 0.0,
                 "strict": 0.0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {
                     "subjective_assessment": {
                         "dimension_key": "naming_quality",
@@ -665,7 +665,7 @@ def test_high_impact_subjective_before_low_impact_mechanical():
         "Naming quality": {
             "score": 43.0,
             "strict": 43.0,
-            "issues": 3,
+            "failing": 3,
             "detectors": {
                 "subjective_assessment": {"dimension_key": "naming_quality"},
             },
@@ -674,7 +674,7 @@ def test_high_impact_subjective_before_low_impact_mechanical():
             "score": 97.0,
             "strict": 97.0,
             "checks": 200,
-            "issues": 1,
+            "failing": 1,
             "detectors": {
                 "smells": {"weighted_failures": 1, "potential": 200},
             },
@@ -781,7 +781,7 @@ def test_evidence_only_reduces_objective_count():
     state = _state(
         findings,
         dimension_scores={
-            "Naming quality": {"score": 70.0, "strict": 70.0, "issues": 1},
+            "Naming quality": {"score": 70.0, "strict": 70.0, "failing": 1},
         },
     )
 
@@ -799,7 +799,7 @@ def test_impact_floor_filters_negligible_impact():
     state = _state(
         [_finding("unused::src/a.py::x", detector="unused", confidence="high")],
         dimension_scores={
-            "Code quality": {"score": 99.99, "strict": 99.99, "checks": 10000, "issues": 1},
+            "Code quality": {"score": 99.99, "strict": 99.99, "checks": 10000, "failing": 1},
         },
     )
     queue = build_work_queue(state, count=None, include_subjective=False)
@@ -899,7 +899,7 @@ def test_plan_ordered_stale_subjective_surfaces_with_objective_backlog():
             "Naming quality": {
                 "score": 70.0,
                 "strict": 70.0,
-                "issues": 1,
+                "failing": 1,
                 "detectors": {
                     "subjective_assessment": {"dimension_key": "naming_quality"},
                 },

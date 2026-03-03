@@ -148,7 +148,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 
     # Commit tracking reminder
     try:
-        from desloppify.app.commands.next_parts.render import render_uncommitted_reminder
+        from desloppify.app.commands.next_parts.render_nudges import render_uncommitted_reminder
         render_uncommitted_reminder(_plan_active)
     except PLAN_LOAD_EXCEPTIONS:
         _logger.debug("commit tracking reminder skipped", exc_info=True)
@@ -196,7 +196,7 @@ def _print_score_section(state, scores, plan, target_strict_score, ctx=None):
             breakdown = plan_aware_queue_breakdown(state, plan, context=ctx)
             queue_remaining = breakdown.queue_total
         except PLAN_LOAD_EXCEPTIONS as exc:
-            logging.debug("Plan-aware queue count failed: %s", exc)
+            _logger.debug("Plan-aware queue count failed: %s", exc)
             queue_remaining = 0
     if plan_start_strict is not None and queue_remaining > 0:
         print_frozen_score_with_queue_context(

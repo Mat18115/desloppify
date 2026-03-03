@@ -393,7 +393,7 @@ class TestComputeDimensionScores:
         assert result["Code quality"]["score"] == 100.0
         assert result["Code quality"]["tier"] == 3
         assert result["Code quality"]["checks"] == 150
-        assert result["Code quality"]["issues"] == 0
+        assert result["Code quality"]["failing"] == 0
 
     def test_skips_dimensions_with_zero_potential(self):
         potentials = {"structural": 100}
@@ -422,7 +422,7 @@ class TestComputeDimensionScores:
         # Review findings are tracked but don't change placeholder score.
         assert "Naming quality" in result
         assert result["Naming quality"]["score"] == 0.0
-        assert result["Naming quality"]["issues"] == 1
+        assert result["Naming quality"]["failing"] == 1
         det = result["Naming quality"]["detectors"]["subjective_assessment"]
         assert det["placeholder"] is True
 
@@ -436,7 +436,7 @@ class TestComputeDimensionScores:
         assert "Code quality" in result
         dim = result["Code quality"]
         assert dim["score"] == 80.0  # (10 - 2) / 10 * 100
-        assert dim["issues"] == 2
+        assert dim["failing"] == 2
         assert dim["checks"] == 10
         assert "unused" in dim["detectors"]
 
@@ -454,7 +454,7 @@ class TestComputeDimensionScores:
         # total: (100 - 2.0) / 100 * 100 = 98.0
         assert dim["score"] == 98.0
         assert dim["checks"] == 100
-        assert dim["issues"] == 2
+        assert dim["failing"] == 2
         assert "smells" in dim["detectors"]
         assert "react" in dim["detectors"]
 
@@ -480,7 +480,7 @@ class TestComputeDimensionScores:
         result = compute_dimension_scores(findings, potentials)
         dim = result["Code quality"]
         assert dim["checks"] == 20
-        assert dim["issues"] == 1
+        assert dim["failing"] == 1
         assert "naming" in dim["detectors"]
         assert "orphaned" not in dim["detectors"]
 
@@ -500,7 +500,7 @@ class TestComputeHealthScore:
                 "score": 100.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             }
         }
@@ -549,7 +549,7 @@ class TestComputeHealthScoreAdditional:
                 "score": 80.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 5,
+                "failing": 5,
                 "detectors": {},
             }
         }
@@ -562,14 +562,14 @@ class TestComputeHealthScoreAdditional:
                 "score": 100.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             },
             "Security": {
                 "score": 50.0,
                 "tier": 4,
                 "checks": 200,
-                "issues": 10,
+                "failing": 10,
                 "detectors": {},
             },
         }
@@ -586,14 +586,14 @@ class TestComputeHealthScoreAdditional:
                 "score": 100.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             },
             "Security": {
                 "score": 0.0,
                 "tier": 4,
                 "checks": 20,
-                "issues": 10,
+                "failing": 10,
                 "detectors": {},
             },
         }
@@ -612,7 +612,7 @@ class TestComputeHealthScoreAdditional:
                 "score": 50.0,
                 "tier": 3,
                 "checks": 0,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             },
         }
@@ -626,14 +626,14 @@ class TestComputeHealthBreakdown:
                 "score": 100.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             },
             "High elegance": {
                 "score": 80.0,
                 "tier": 4,
                 "checks": SUBJECTIVE_CHECKS,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {"subjective_assessment": {}},
             },
         }
@@ -656,7 +656,7 @@ class TestComputeHealthBreakdown:
                 "score": 90.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {},
             }
         }
@@ -717,12 +717,12 @@ class TestComputeScoreImpact:
                 "score": 80.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 40,
+                "failing": 40,
                 "detectors": {
                     "unused": {
                         "potential": 200,
                         "pass_rate": 0.8,
-                        "issues": 40,
+                        "failing": 40,
                         "weighted_failures": 40.0,
                     },
                 },
@@ -782,12 +782,12 @@ class TestComputeScoreImpact:
                 "score": 80.0,
                 "tier": 3,
                 "checks": 200,
-                "issues": 40,
+                "failing": 40,
                 "detectors": {
                     "unused": {
                         "potential": 200,
                         "pass_rate": 0.8,
-                        "issues": 40,
+                        "failing": 40,
                         "weighted_failures": 40.0,
                     },
                 },
@@ -796,12 +796,12 @@ class TestComputeScoreImpact:
                 "score": 100.0,
                 "tier": 4,
                 "checks": 200,
-                "issues": 0,
+                "failing": 0,
                 "detectors": {
                     "security": {
                         "potential": 200,
                         "pass_rate": 1.0,
-                        "issues": 0,
+                        "failing": 0,
                         "weighted_failures": 0.0,
                     },
                 },
@@ -905,7 +905,7 @@ class TestSubjectiveScoring:
         assert dim["score"] == 75.0
         assert dim["tier"] == 4
         assert dim["checks"] == SUBJECTIVE_CHECKS
-        assert dim["issues"] == 0
+        assert dim["failing"] == 0
         assert "subjective_assessment" in dim["detectors"]
         det = dim["detectors"]["subjective_assessment"]
         assert det["potential"] == SUBJECTIVE_CHECKS
@@ -1080,9 +1080,9 @@ class TestSubjectiveScoring:
             findings, {}, subjective_assessments=assessments
         )
         dim = result["Naming quality"]
-        assert dim["issues"] == 2  # only the 2 open ones tracked
+        assert dim["failing"] == 2  # only the 2 open ones tracked
         det = dim["detectors"]["subjective_assessment"]
-        assert det["issues"] == 2
+        assert det["failing"] == 2
         # Score driven by assessment (70), not issue count
         assert det["pass_rate"] == 0.7
         assert dim["score"] == 70.0
@@ -1124,7 +1124,7 @@ class TestSubjectiveScoring:
             findings, {}, subjective_assessments=assessments
         )
         dim = result["Naming quality"]
-        assert dim["issues"] == 0  # smells detector, not "review"
+        assert dim["failing"] == 0  # smells detector, not "review"
 
     def test_compute_score_impact_returns_zero_for_subjective(self):
         """compute_score_impact returns 0.0 for subjective dimensions."""

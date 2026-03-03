@@ -676,7 +676,7 @@ class TestSecurityDimensionScoring:
         scores = compute_dimension_scores(findings, potentials)
         assert "Security" in scores
         assert scores["Security"]["score"] < 100.0
-        assert scores["Security"]["issues"] == 5
+        assert scores["Security"]["failing"] == 5
 
     def test_security_zone_test_excluded(self):
         """Security findings in test zone are skipped from scoring."""
@@ -695,7 +695,7 @@ class TestSecurityDimensionScoring:
         potentials = {"security": 10}
         scores = compute_dimension_scores(findings, potentials)
         assert "Security" in scores
-        assert scores["Security"]["issues"] == 0
+        assert scores["Security"]["failing"] == 0
         assert scores["Security"]["score"] == 100.0
 
     def test_security_zone_config_excluded(self):
@@ -715,7 +715,7 @@ class TestSecurityDimensionScoring:
         potentials = {"security": 10}
         scores = compute_dimension_scores(findings, potentials)
         assert "Security" in scores
-        assert scores["Security"]["issues"] == 0
+        assert scores["Security"]["failing"] == 0
         assert scores["Security"]["score"] == 100.0
 
     def test_security_zone_vendor_excluded(self):
@@ -735,7 +735,7 @@ class TestSecurityDimensionScoring:
         potentials = {"security": 10}
         scores = compute_dimension_scores(findings, potentials)
         assert "Security" in scores
-        assert scores["Security"]["issues"] == 0
+        assert scores["Security"]["failing"] == 0
         assert scores["Security"]["score"] == 100.0
 
     def test_security_zone_generated_excluded(self):
@@ -755,7 +755,7 @@ class TestSecurityDimensionScoring:
         potentials = {"security": 10}
         scores = compute_dimension_scores(findings, potentials)
         assert "Security" in scores
-        assert scores["Security"]["issues"] == 0
+        assert scores["Security"]["failing"] == 0
 
     def test_security_excluded_zones_constant(self):
         assert SECURITY_EXCLUDED_ZONES == {"test", "config", "generated", "vendor"}

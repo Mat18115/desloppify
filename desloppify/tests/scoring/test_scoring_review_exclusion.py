@@ -123,7 +123,7 @@ class TestReviewFindingsExcludedFromScoring:
                     "strict": 75.0,
                     "tier": 4,
                     "checks": 100,
-                    "issues": 0,
+                    "failing": 0,
                     "detectors": {
                         "subjective_assessment": {
                             "dimension_key": "naming_quality",
@@ -160,7 +160,7 @@ class TestReviewFindingsExcludedFromScoring:
                     "strict": 75.0,
                     "tier": 4,
                     "checks": 100,
-                    "issues": 0,
+                    "failing": 0,
                     "detectors": {
                         "subjective_assessment": {
                             "dimension_key": "naming_quality",

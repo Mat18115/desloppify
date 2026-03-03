@@ -107,7 +107,7 @@ def unassessed_subjective_dimensions(dim_scores: dict | None) -> list[str]:
             unassessed.append(name)
             continue
         strict_val = float(info.get("strict", info.get("score", 100.0)))
-        issues = int(info.get("issues", 0))
+        issues = int(info.get("failing", 0))
         if strict_val <= 0.0 and issues == 0:
             unassessed.append(name)
 

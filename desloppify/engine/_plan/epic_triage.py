@@ -352,7 +352,7 @@ def build_triage_prompt(si: TriageInput) -> str:
             if isinstance(data, dict):
                 score = data.get("score", "?")
                 strict = data.get("strict", score)
-                issues = data.get("issues", 0)
+                issues = data.get("failing", 0)
                 parts.append(f"- {name}: {score}% (strict: {strict}%, {issues} issues)")
         parts.append("")
 

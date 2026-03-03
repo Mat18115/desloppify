@@ -138,7 +138,7 @@ def show_focus_suggestion(
             if ds:
                 lowest_score = float(ds.get("strict", ds["score"]))
                 lowest_kind = "mechanical"
-                lowest_issues = int(ds.get("issues", 0))
+                lowest_issues = int(ds.get("failing", 0))
             break
     else:
         for entry in scorecard_subjective:

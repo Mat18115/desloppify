@@ -170,7 +170,7 @@ class TestPlanDimensionTable:
             dimension_scores={
                 "Import hygiene": {
                     "checks": 10,
-                    "issues": 2,
+                    "failing": 2,
                     "score": 80.0,
                     "strict": 75.0,
                 },
@@ -184,7 +184,7 @@ class TestPlanDimensionTable:
             dimension_scores={
                 "Import hygiene": {
                     "checks": 10,
-                    "issues": 2,
+                    "failing": 2,
                     "score": 90.0,
                     "strict": 85.0,
                 },
@@ -200,7 +200,7 @@ class TestPlanDimensionTable:
             dimension_scores={
                 "Import hygiene": {
                     "checks": 100,
-                    "issues": 1,
+                    "failing": 1,
                     "score": 99.0,
                     "strict": 98.0,
                 },
@@ -308,7 +308,7 @@ class TestPlanItemSections:
         state = {
             "findings": findings,
             "dimension_scores": {
-                "Naming quality": {"score": 94.0, "strict": 94.0, "issues": 2}
+                "Naming quality": {"score": 94.0, "strict": 94.0, "failing": 2}
             },
         }
         lines = _plan_item_sections(findings, state=state)
@@ -526,8 +526,8 @@ class TestGetNextItems:
         st = _state(
             [standard, holistic],
             dimension_scores={
-                "Naming quality": {"score": 92.0, "strict": 92.0, "issues": 2},
-                "Logic clarity": {"score": 88.0, "strict": 88.0, "issues": 3},
+                "Naming quality": {"score": 92.0, "strict": 92.0, "failing": 2},
+                "Logic clarity": {"score": 88.0, "strict": 88.0, "failing": 3},
             },
         )
         items = get_next_items(st, count=2)
