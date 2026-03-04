@@ -280,6 +280,41 @@ def _build_evidence(
     return tuple(evidence)
 
 
+def _try_make_concern(
+    *,
+    concern_type: str,
+    file: str,
+    fp_keys: tuple[str, ...],
+    all_ids: tuple[str, ...],
+    dismissals: dict,
+    summary: str,
+    evidence: tuple[str, ...],
+    question: str,
+    fp_file: str | None = None,
+) -> Concern | None:
+    """Compute fingerprint, check dismissal, and construct Concern if not dismissed.
+
+    Encapsulates the shared fingerprint -> dismiss -> construct pattern used by
+    all three concern generators.
+
+    ``fp_file`` overrides the file string used in the fingerprint hash when it
+    differs from the Concern's display file (e.g. cross-file patterns use a
+    joined file list for fingerprint stability but report the first file).
+    """
+    fp = _fingerprint(concern_type, fp_file if fp_file is not None else file, fp_keys)
+    if _is_dismissed(dismissals, fp, all_ids):
+        return None
+    return Concern(
+        type=concern_type,
+        file=file,
+        summary=summary,
+        evidence=evidence,
+        question=question,
+        fingerprint=fp,
+        source_issues=all_ids,
+    )
+
+
 def _build_question(
     detectors: set[str], signals: ConcernSignals
 ) -> str:
@@ -379,28 +414,21 @@ def _file_concerns(state: StateModel, dismissals: dict[str, Any]) -> list[Concer
 
         signals = _extract_signals(judgment)
         concern_type = _classify(judgment_dets, signals)
-        evidence = _build_evidence(judgment, signals)
-        question = _build_question(judgment_dets, signals)
-        summary = _build_summary(concern_type, judgment_dets, signals)
-
         all_ids = tuple(sorted(f.get("id", "") for f in judgment))
         fp_keys = tuple(sorted(judgment_dets))
-        fp = _fingerprint(concern_type, file, fp_keys)
 
-        if _is_dismissed(dismissals, fp, all_ids):
-            continue
-
-        concerns.append(
-            Concern(
-                type=concern_type,
-                file=file,
-                summary=summary,
-                evidence=evidence,
-                question=question,
-                fingerprint=fp,
-                source_issues=all_ids,
-            )
+        concern = _try_make_concern(
+            concern_type=concern_type,
+            file=file,
+            fp_keys=fp_keys,
+            all_ids=all_ids,
+            dismissals=dismissals,
+            summary=_build_summary(concern_type, judgment_dets, signals),
+            evidence=_build_evidence(judgment, signals),
+            question=_build_question(judgment_dets, signals),
         )
+        if concern is not None:
+            concerns.append(concern)
 
     return concerns
 
@@ -437,39 +465,32 @@ def _cross_file_patterns(state: StateModel, dismissals: dict[str, Any]) -> list[
             if f.get("detector", "") in det_combo
         ))
         # Use first few files in fingerprint so it's stable but bounded.
-        fp = _fingerprint(
-            "systemic_pattern",
-            ",".join(sorted_files[:5]),
-            combo_names,
+        concern = _try_make_concern(
+            concern_type="systemic_pattern",
+            file=sorted_files[0],
+            fp_file=",".join(sorted_files[:5]),
+            fp_keys=combo_names,
+            all_ids=all_ids,
+            dismissals=dismissals,
+            summary=(
+                f"{len(files)} files share the same problem pattern "
+                f"({', '.join(combo_names)})"
+            ),
+            evidence=(
+                f"Affected files: {', '.join(sorted_files[:10])}",
+                f"Shared detectors: {', '.join(combo_names)}",
+                f"Total files: {len(files)}",
+            ),
+            question=(
+                f"These {len(files)} files all have the same combination "
+                f"of issues ({', '.join(combo_names)}). Is this a systemic "
+                "pattern that should be addressed at the architecture level "
+                "(shared base class, framework change, lint rule), or are "
+                "these independent issues that happen to look similar?"
+            ),
         )
-
-        if _is_dismissed(dismissals, fp, all_ids):
-            continue
-
-        concerns.append(
-            Concern(
-                type="systemic_pattern",
-                file=sorted_files[0],
-                summary=(
-                    f"{len(files)} files share the same problem pattern "
-                    f"({', '.join(combo_names)})"
-                ),
-                evidence=(
-                    f"Affected files: {', '.join(sorted_files[:10])}",
-                    f"Shared detectors: {', '.join(combo_names)}",
-                    f"Total files: {len(files)}",
-                ),
-                question=(
-                    f"These {len(files)} files all have the same combination "
-                    f"of issues ({', '.join(combo_names)}). Is this a systemic "
-                    "pattern that should be addressed at the architecture level "
-                    "(shared base class, framework change, lint rule), or are "
-                    "these independent issues that happen to look similar?"
-                ),
-                fingerprint=fp,
-                source_issues=all_ids,
-            )
-        )
+        if concern is not None:
+            concerns.append(concern)
 
     return concerns
 
@@ -502,32 +523,30 @@ def _systemic_smell_patterns(
             continue
 
         all_ids = tuple(sorted(smell_ids_map[smell_id]))
-        fp = _fingerprint("systemic_smell", smell_id, (smell_id,))
-        if _is_dismissed(dismissals, fp, all_ids):
-            continue
-
-        concerns.append(
-            Concern(
-                type="systemic_smell",
-                file=unique_files[0],
-                summary=(
-                    f"'{smell_id}' appears in {len(unique_files)} files — "
-                    "likely a systemic pattern"
-                ),
-                evidence=(
-                    f"Smell: {smell_id}",
-                    f"Affected files ({len(unique_files)}): {', '.join(unique_files[:10])}",
-                ),
-                question=(
-                    f"The smell '{smell_id}' appears across {len(unique_files)} files. "
-                    "Is this a codebase-wide convention that should be addressed "
-                    "systemically (lint rule, shared utility, architecture change), "
-                    "or are these independent occurrences?"
-                ),
-                fingerprint=fp,
-                source_issues=all_ids,
-            )
+        concern = _try_make_concern(
+            concern_type="systemic_smell",
+            file=unique_files[0],
+            fp_file=smell_id,
+            fp_keys=(smell_id,),
+            all_ids=all_ids,
+            dismissals=dismissals,
+            summary=(
+                f"'{smell_id}' appears in {len(unique_files)} files — "
+                "likely a systemic pattern"
+            ),
+            evidence=(
+                f"Smell: {smell_id}",
+                f"Affected files ({len(unique_files)}): {', '.join(unique_files[:10])}",
+            ),
+            question=(
+                f"The smell '{smell_id}' appears across {len(unique_files)} files. "
+                "Is this a codebase-wide convention that should be addressed "
+                "systemically (lint rule, shared utility, architecture change), "
+                "or are these independent occurrences?"
+            ),
         )
+        if concern is not None:
+            concerns.append(concern)
 
     return concerns
 

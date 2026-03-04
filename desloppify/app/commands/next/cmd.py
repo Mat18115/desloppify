@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 
 from desloppify import state as state_mod
 from desloppify.app.commands.helpers.guardrails import print_triage_guardrail_info
@@ -39,6 +40,36 @@ from . import render_nudges as next_nudges_mod
 from .render_support import render_queue_header as _render_queue_header
 from .render_support import scorecard_subjective as _scorecard_subjective_impl
 from .render_support import show_empty_queue as _show_empty_queue
+
+
+@dataclass(frozen=True)
+class NextOptions:
+    """All user-facing options for the ``next`` command, extracted once."""
+
+    count: int = 1
+    scope: str | None = None
+    status: str = "open"
+    group: str = "item"
+    explain: bool = False
+    cluster: str | None = None
+    include_skipped: bool = False
+    output_file: str | None = None
+    output_format: str = "terminal"
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> NextOptions:
+        """Build from an argparse Namespace, applying defaults for missing attrs."""
+        return cls(
+            count=getattr(args, "count", 1) or 1,
+            scope=getattr(args, "scope", None),
+            status=getattr(args, "status", "open"),
+            group=getattr(args, "group", "item"),
+            explain=bool(getattr(args, "explain", False)),
+            cluster=getattr(args, "cluster", None),
+            include_skipped=bool(getattr(args, "include_skipped", False)),
+            output_file=getattr(args, "output", None),
+            output_format=getattr(args, "format", "terminal"),
+        )
 
 
 def _scorecard_subjective(
@@ -132,14 +163,13 @@ def _build_next_payload(
 
 
 def _emit_requested_output(
-    args,
+    opts: NextOptions,
     payload: dict,
     items: list[dict],
 ) -> bool:
-    output_file = getattr(args, "output", None)
-    if output_file:
+    if opts.output_file:
         if next_output_mod.write_output_file(
-            output_file,
+            opts.output_file,
             payload,
             len(items),
             safe_write_text_fn=safe_write_text,
@@ -148,8 +178,7 @@ def _emit_requested_output(
             return True
         raise SystemExit(1)
 
-    output_format = getattr(args, "format", "terminal")
-    if next_output_mod.emit_non_terminal_output(output_format, payload, items):
+    if next_output_mod.emit_non_terminal_output(opts.output_format, payload, items):
         return True
     return False
 
@@ -176,14 +205,8 @@ def _merge_potentials_safe(raw_potentials: dict | None) -> dict | None:
         return raw_potentials or None
 
 
-def _get_items(args, state: dict, config: dict) -> None:
-    count = getattr(args, "count", 1) or 1
-    scope = getattr(args, "scope", None)
-    status = getattr(args, "status", "open")
-    group = getattr(args, "group", "item")
-    explain = bool(getattr(args, "explain", False))
-    cluster_arg = getattr(args, "cluster", None)
-    include_skipped = bool(getattr(args, "include_skipped", False))
+def _get_items(args: argparse.Namespace, state: dict, config: dict) -> None:
+    opts = NextOptions.from_args(args)
 
     target_strict = target_strict_score_from_config(config)
 
@@ -206,20 +229,20 @@ def _get_items(args, state: dict, config: dict) -> None:
     # Auto-scope to focus cluster if set and no explicit scope/cluster
     effective_cluster = _resolve_cluster_focus(
         plan_data,
-        cluster_arg=cluster_arg,
-        scope=scope,
+        cluster_arg=opts.cluster,
+        scope=opts.scope,
     )
 
     queue = build_work_queue(
         state,
         options=QueueBuildOptions(
-            count=count,
-            scope=scope,
-            status=status,
+            count=opts.count,
+            scope=opts.scope,
+            status=opts.status,
             include_subjective=True,
             subjective_threshold=target_strict,
-            explain=explain,
-            include_skipped=include_skipped,
+            explain=opts.explain,
+            include_skipped=opts.include_skipped,
             cluster=effective_cluster,
             context=ctx,
         ),
@@ -242,7 +265,7 @@ def _get_items(args, state: dict, config: dict) -> None:
     )
     write_query(payload)
 
-    if _emit_requested_output(args, payload, items):
+    if _emit_requested_output(opts, payload, items):
         return
 
     dim_scores = state.get("dimension_scores", {})
@@ -259,7 +282,7 @@ def _get_items(args, state: dict, config: dict) -> None:
     )
     queue_total = breakdown.queue_total if breakdown else 0
 
-    _render_queue_header(queue, explain)
+    _render_queue_header(queue, opts.explain)
     strict_score = state_mod.score_snapshot(state).strict
     if _show_empty_queue(
         queue,
@@ -272,7 +295,7 @@ def _get_items(args, state: dict, config: dict) -> None:
     raw_potentials = state.get("potentials", {})
     potentials = _merge_potentials_safe(raw_potentials)
     next_render_mod.render_terminal_items(
-        items, dim_scores, issues_scoped, group=group, explain=explain,
+        items, dim_scores, issues_scoped, group=opts.group, explain=opts.explain,
         potentials=potentials, plan=plan_data,
         cluster_filter=effective_cluster,
     )
@@ -291,4 +314,4 @@ def _get_items(args, state: dict, config: dict) -> None:
     print()
 
 
-__all__ = ["_low_subjective_dimensions", "cmd_next"]
+__all__ = ["NextOptions", "_low_subjective_dimensions", "cmd_next"]

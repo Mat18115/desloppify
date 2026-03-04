@@ -48,6 +48,31 @@ class Issue(TypedDict):
     tier: int
     confidence: str
     summary: str
+    # Known detail shapes per detector (non-exhaustive, for reference):
+    #
+    # structural:      {loc, complexity_score?, complexity_signals?: list[str],
+    #                   name? (god class), ...god_class_metrics}
+    # smells:          {smell_id, severity, count, lines: list[int]}
+    # dupes:           {fn_a: dict, fn_b: dict, similarity, kind, cluster_size,
+    #                   cluster: list}
+    # coupling:        {target, tool?, direction, sole_tool?, importer_count?,
+    #                   loc?, source_tool?, target_tool?}
+    # single_use:      {loc, sole_importer}
+    # orphaned:        {loc}
+    # facade:          {loc, importers, imports_from: list[str], kind}
+    # review:          {holistic?: bool, dimension?, related_files?: list[str],
+    #                   suggestion?, evidence?: list[str], investigation?,
+    #                   merged_at?}
+    # review_coverage: {reason, loc?, age_days?, old_files?, new_files?}
+    # security:        {kind, severity, line, content, remediation}
+    # test_coverage:   {kind, loc?, importer_count?, loc_weight?,
+    #                   test_file?, test_functions?, assertions?, mocks?,
+    #                   snapshots?}
+    # props:           {passthrough entry fields minus "file"}
+    # subjective_assessment (synthetic): {dimension_name, dimension, failing,
+    #                   strict_score, open_review_issues?}
+    # workflow (synthetic): {stage?, strict?, plan_start_strict?, delta?,
+    #                   total_review_issues?, explanation?}
     detail: dict[str, Any]
     status: Status
     note: str | None
