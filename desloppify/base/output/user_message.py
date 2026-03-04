@@ -8,22 +8,21 @@ _BOX_WIDTH = 58
 
 
 def print_user_message(text: str) -> None:
-    """Print a box formatted like a Claude API user turn.
+    """Print a plain bordered box to nudge LLM agent behavior.
+
+    Uses a simple box without JSON framing — experiments showed agents
+    engage with the content rather than reflexively dismissing it as
+    prompt injection (which JSON-framed variants triggered).
 
     Plain text (no color) so it stands out among colored triage output.
     """
-    wrapped = textwrap.wrap(text, width=50)
-
-    header = '{"role": "user", "content": [{"type": "text", "text":'
-    footer = '}]}'
+    wrapped = textwrap.wrap(text, width=54)
 
     print()
-    print(f'  ┌─ User {"─" * (_BOX_WIDTH - 10)}┐')
-    print(f"  │ {header.ljust(_BOX_WIDTH - 1)}│")
+    print(f"  ┌{'─' * _BOX_WIDTH}┐")
     print(f"  │{' ' * _BOX_WIDTH}│")
     for line in wrapped:
-        print(f"  │   {line.ljust(_BOX_WIDTH - 3)}│")
+        print(f"  │  {line.ljust(_BOX_WIDTH - 2)}│")
     print(f"  │{' ' * _BOX_WIDTH}│")
-    print(f"  │ {footer.ljust(_BOX_WIDTH - 1)}│")
     print(f"  └{'─' * _BOX_WIDTH}┘")
     print()
