@@ -13,19 +13,16 @@ def _build_flat_dir_issues(by_detector: dict[str, list[dict]]) -> list[dict]:
         detail = issue.get("detail", {})
         if not isinstance(detail, dict):
             detail = {}
-        detail.setdefault("kind", "")
-        detail.setdefault("reason", "")
-        detail.setdefault("file_count", 0)
-        detail.setdefault("score", 0)
-        detail.setdefault("combined_score", 0)
+        kind = detail.get("kind") or detail.get("reason", "")
+        raw_score = detail.get("score")
+        if raw_score is None:
+            raw_score = detail.get("combined_score", 0)
         results.append(
             {
                 "directory": filepath,
-                "kind": detail.get("kind", detail.get("reason", "")),
-                "file_count": int(_safe_num(detail.get("file_count"))),
-                "combined_score": int(
-                    _safe_num(detail.get("score", detail.get("combined_score")))
-                ),
+                "kind": kind,
+                "file_count": int(_safe_num(detail.get("file_count", 0))),
+                "combined_score": int(_safe_num(raw_score)),
             }
         )
     results.sort(key=lambda e: -e["combined_score"])
