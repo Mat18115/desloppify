@@ -35,13 +35,20 @@ from ._stage_validation import (
     _organize_report_or_error,
     _require_organize_stage_for_enrich,
     _require_reflect_stage_for_organize,
-    _underspecified_steps,
+    _steps_missing_issue_refs,
     _steps_with_bad_paths,
+    _steps_with_vague_detail,
     _steps_without_effort,
+    _underspecified_steps,
     _unclustered_review_issues_or_error,
     _validate_recurring_dimension_mentions,
 )
 from .services import TriageServices, default_triage_services
+from .stage_flow_enrich_sense import (
+    record_sense_check_stage as _record_sense_check_stage_impl,
+    run_stage_enrich,
+    run_stage_sense_check,
+)
 
 
 def _cmd_stage_observe(
@@ -399,243 +406,22 @@ def _cmd_stage_enrich(
     *,
     services: TriageServices | None = None,
 ) -> None:
-    """Record the ENRICH stage: validate steps have detail/refs for executor readiness.
-
-    This stage sits between organize and commit. It checks whether action steps
-    are detailed enough for an executor with zero context. Steps should have
-    ``detail`` (sub-points) and/or ``issue_refs`` (for auto-completion).
-
-    The agent can still go back and organize (add/remove clusters, reorder)
-    at this point — the stage just validates step quality.
-    """
-    report: str | None = getattr(args, "report", None)
-    attestation: str | None = getattr(args, "attestation", None)
-
-    resolved_services = services or default_triage_services()
-    plan = resolved_services.load_plan()
-
-    if not has_triage_in_queue(plan):
-        print(colorize("  No planning stages in the queue — nothing to enrich.", "yellow"))
-        return
-
-    meta = plan.get("epic_triage_meta", {})
-    stages = meta.get("triage_stages", {})
-
-    # Jump-back: reuse existing report if no --report provided
-    existing_stage = stages.get("enrich")
-    report, is_reuse = resolve_reusable_report(report, existing_stage)
-
-    if not _require_organize_stage_for_enrich(stages):
-        return
-
-    # Auto-confirm organize if attestation provided
-    if not stages.get("organize", {}).get("confirmed_at"):
-        if attestation:
-            from ._stage_validation import _auto_confirm_organize_for_complete
-            if not _auto_confirm_organize_for_complete(
-                plan=plan,
-                stages=stages,
-                attestation=attestation,
-                save_plan_fn=resolved_services.save_plan,
-            ):
-                return
-        else:
-            print(colorize("  Cannot enrich: organize stage not confirmed.", "red"))
-            print(colorize("  Run: desloppify plan triage --confirm organize", "dim"))
-            print(colorize("  Or pass --attestation to auto-confirm organize inline.", "dim"))
-            return
-
-    # Check underspecified steps — block if any steps lack detail or issue_refs
-    underspec = _underspecified_steps(plan)
-    total_bare = sum(n for _, n, _ in underspec)
-
-    if underspec:
-        print(colorize(f"  Cannot enrich: {total_bare} step(s) across {len(underspec)} cluster(s) lack detail or issue_refs:", "red"))
-        for name, bare, total in underspec:
-            print(colorize(f"    {name}: {bare}/{total} steps need enrichment", "yellow"))
-        print()
-        print(colorize("  Every step needs --detail (sub-points) or --issue-refs (for auto-completion).", "dim"))
-        print(colorize("  Fix:", "dim"))
-        print(colorize('    desloppify plan cluster update <name> --update-step N --detail "sub-details"', "dim"))
-        print(colorize("  You can also still reorganize: add/remove clusters, reorder, etc.", "dim"))
-        return
-    else:
-        print(colorize("  All steps have detail or issue_refs.", "green"))
-
-    # Advisory: check for bad file paths in step details
-    from desloppify.base.discovery.paths import get_project_root
-    bad_paths = _steps_with_bad_paths(plan, get_project_root())
-    if bad_paths:
-        total_bad = sum(len(bp) for _, _, bp in bad_paths)
-        print(colorize(f"  Warning: {total_bad} file path(s) in step details don't exist on disk:", "yellow"))
-        for name, step_num, paths in bad_paths[:5]:
-            print(colorize(f"    {name} step {step_num}: {', '.join(paths[:3])}", "yellow"))
-        print(colorize("  Fix paths before confirming enrich (confirmation will block on bad paths).", "dim"))
-
-    # Advisory: check for missing effort tags
-    untagged = _steps_without_effort(plan)
-    if untagged:
-        total_missing = sum(n for _, n, _ in untagged)
-        print(colorize(f"  Note: {total_missing} step(s) have no effort tag.", "yellow"))
-        print(colorize("  Consider: desloppify plan cluster update <name> --update-step N --effort small", "dim"))
-
-    report = _enrich_report_or_error(report)
-    if report is None:
-        return
-
-    stages = meta.setdefault("triage_stages", {})
-    cleared = record_enrich_stage(
-        stages,
-        report=report,
-        shallow_count=total_bare,
-        existing_stage=existing_stage,
-        is_reuse=is_reuse,
+    """Public wrapper for enrich stage with patchable module dependencies."""
+    run_stage_enrich(
+        args,
+        services=services,
+        has_triage_in_queue_fn=has_triage_in_queue,
+        require_organize_stage_for_enrich_fn=_require_organize_stage_for_enrich,
+        underspecified_steps_fn=_underspecified_steps,
+        steps_with_bad_paths_fn=_steps_with_bad_paths,
+        steps_without_effort_fn=_steps_without_effort,
+        enrich_report_or_error_fn=_enrich_report_or_error,
+        resolve_reusable_report_fn=resolve_reusable_report,
+        record_enrich_stage_fn=record_enrich_stage,
+        colorize_fn=colorize,
+        print_user_message_fn=print_user_message,
+        print_cascade_clear_feedback_fn=print_cascade_clear_feedback,
     )
-
-    resolved_services.save_plan(plan)
-
-    resolved_services.append_log_entry(
-        plan,
-        "triage_enrich",
-        actor="user",
-        detail={"shallow_count": total_bare, "reuse": is_reuse},
-    )
-    resolved_services.save_plan(plan)
-
-    print(colorize(
-        f"  Enrich stage recorded: {total_bare} step(s) still without detail.",
-        "green",
-    ))
-    if is_reuse:
-        print(colorize("  Enrich data preserved (no changes).", "dim"))
-        if cleared:
-            print_cascade_clear_feedback(cleared, stages)
-    else:
-        print(colorize("  Now confirm the enrichment.", "yellow"))
-        print(colorize("    desloppify plan triage --confirm enrich", "dim"))
-
-    print_user_message(
-        "Enrich recorded. Before confirming — check the subagent's"
-        " work. Could a developer who has never seen this code"
-        " execute every step without asking a question? Every step"
-        " needs: file path, specific location, specific action."
-        " 'Refactor X' fails. 'Extract lines 45-89 into Y' passes."
-    )
-
-
-def _cmd_stage_sense_check(
-    args: argparse.Namespace,
-    *,
-    services: TriageServices | None = None,
-) -> None:
-    """Record the SENSE-CHECK stage: verify step accuracy and cross-cluster deps.
-
-    Re-runs all enrich-level checks after content/structure subagents have
-    mutated the plan. Requires enrich confirmed.
-    """
-    report: str | None = getattr(args, "report", None)
-
-    resolved_services = services or default_triage_services()
-    plan = resolved_services.load_plan()
-
-    if not has_triage_in_queue(plan):
-        print(colorize("  No planning stages in the queue — nothing to sense-check.", "yellow"))
-        return
-
-    meta = plan.get("epic_triage_meta", {})
-    stages = meta.get("triage_stages", {})
-
-    # Jump-back: reuse existing report if no --report provided
-    existing_stage = stages.get("sense-check")
-    report, is_reuse = resolve_reusable_report(report, existing_stage)
-
-    # Gate: enrich must be confirmed
-    if not stages.get("enrich", {}).get("confirmed_at"):
-        print(colorize("  Cannot sense-check: enrich stage not confirmed.", "red"))
-        print(colorize("  Run: desloppify plan triage --confirm enrich", "dim"))
-        return
-
-    # Re-run enrich-level validations on the (possibly mutated) plan
-    from desloppify.base.discovery.paths import get_project_root
-    from ._stage_validation import (
-        _underspecified_steps,
-        _steps_missing_issue_refs,
-        _steps_with_bad_paths,
-        _steps_with_vague_detail,
-        _steps_without_effort,
-    )
-
-    repo_root = get_project_root()
-    problems: list[str] = []
-
-    underspec = _underspecified_steps(plan)
-    if underspec:
-        total_bare = sum(n for _, n, _ in underspec)
-        problems.append(f"{total_bare} step(s) lack detail or issue_refs")
-
-    bad_paths = _steps_with_bad_paths(plan, repo_root)
-    if bad_paths:
-        total_bad = sum(len(bp) for _, _, bp in bad_paths)
-        problems.append(f"{total_bad} file path(s) don't exist on disk")
-
-    untagged = _steps_without_effort(plan)
-    if untagged:
-        total_missing = sum(n for _, n, _ in untagged)
-        problems.append(f"{total_missing} step(s) have no effort tag")
-
-    no_refs = _steps_missing_issue_refs(plan)
-    if no_refs:
-        total_missing = sum(n for _, n, _ in no_refs)
-        problems.append(f"{total_missing} step(s) have no issue_refs")
-
-    vague = _steps_with_vague_detail(plan, repo_root)
-    if vague:
-        problems.append(f"{len(vague)} step(s) have vague detail")
-
-    if problems:
-        print(colorize("  Cannot record sense-check — plan still has issues:", "red"))
-        for p in problems:
-            print(colorize(f"    • {p}", "yellow"))
-        print(colorize("  Fix these before recording the sense-check stage.", "dim"))
-        return
-
-    print(colorize("  All enrich-level checks pass after sense-check.", "green"))
-
-    if not report:
-        print(colorize("  --report is required for --stage sense-check.", "red"))
-        print(colorize("  Describe what the content and structure subagents found and fixed.", "dim"))
-        return
-
-    if len(report) < 100:
-        print(colorize(f"  Report too short: {len(report)} chars (minimum 100).", "red"))
-        return
-
-    stages = meta.setdefault("triage_stages", {})
-    cleared = _record_sense_check_stage(
-        stages,
-        report=report,
-        existing_stage=existing_stage,
-        is_reuse=is_reuse,
-    )
-
-    resolved_services.save_plan(plan)
-
-    resolved_services.append_log_entry(
-        plan,
-        "triage_sense_check",
-        actor="user",
-        detail={"reuse": is_reuse},
-    )
-    resolved_services.save_plan(plan)
-
-    print(colorize("  Sense-check stage recorded.", "green"))
-    if is_reuse:
-        print(colorize("  Sense-check data preserved (no changes).", "dim"))
-        if cleared:
-            print_cascade_clear_feedback(cleared, stages)
-    else:
-        print(colorize("  Now confirm the sense-check.", "yellow"))
-        print(colorize("    desloppify plan triage --confirm sense-check", "dim"))
 
 
 def _record_sense_check_stage(
@@ -645,15 +431,36 @@ def _record_sense_check_stage(
     existing_stage: dict | None,
     is_reuse: bool,
 ) -> list[str]:
-    stages["sense-check"] = {
-        "stage": "sense-check",
-        "report": report,
-        "timestamp": utc_now(),
-    }
-    if is_reuse and existing_stage and existing_stage.get("confirmed_at"):
-        stages["sense-check"]["confirmed_at"] = existing_stage["confirmed_at"]
-        stages["sense-check"]["confirmed_text"] = existing_stage.get("confirmed_text", "")
-    return cascade_clear_later_confirmations(stages, "sense-check")
+    return _record_sense_check_stage_impl(
+        stages,
+        report=report,
+        existing_stage=existing_stage,
+        is_reuse=is_reuse,
+        utc_now_fn=utc_now,
+        cascade_clear_later_confirmations_fn=cascade_clear_later_confirmations,
+    )
+
+
+def _cmd_stage_sense_check(
+    args: argparse.Namespace,
+    *,
+    services: TriageServices | None = None,
+) -> None:
+    """Public wrapper for sense-check stage with patchable module dependencies."""
+    run_stage_sense_check(
+        args,
+        services=services,
+        has_triage_in_queue_fn=has_triage_in_queue,
+        resolve_reusable_report_fn=resolve_reusable_report,
+        record_sense_check_stage_fn=_record_sense_check_stage,
+        colorize_fn=colorize,
+        print_cascade_clear_feedback_fn=print_cascade_clear_feedback,
+        underspecified_steps_fn=_underspecified_steps,
+        steps_missing_issue_refs_fn=_steps_missing_issue_refs,
+        steps_with_bad_paths_fn=_steps_with_bad_paths,
+        steps_with_vague_detail_fn=_steps_with_vague_detail,
+        steps_without_effort_fn=_steps_without_effort,
+    )
 
 
 def cmd_stage_observe(
