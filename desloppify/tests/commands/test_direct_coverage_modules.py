@@ -61,7 +61,7 @@ import desloppify.languages.python.detectors.private_imports as private_imports
 import desloppify.languages.python.detectors.smells_ast._dispatch as smells_ast_dispatch
 import desloppify.languages.python.detectors.smells_ast._helpers as smells_ast_shared
 import desloppify.languages.python.detectors.smells_ast._source_detectors as smells_ast_source_detectors
-import desloppify.languages.python.detectors.smells_ast._tree_context_detectors as smells_ast_tree_context_detectors
+import desloppify.languages.python.detectors.smells_ast._tree_context_paths as smells_ast_tree_context_paths
 import desloppify.languages.python.detectors.smells_ast._tree_quality_detectors as smells_ast_tree_quality_detectors
 import desloppify.languages.python.detectors.smells_ast._tree_quality_detectors_types as smells_ast_tree_quality_detectors_types
 import desloppify.languages.python.detectors.smells_ast._tree_safety_detectors as smells_ast_tree_safety_detectors
@@ -168,7 +168,7 @@ def test_smoke_engine():
         smells_ast_shared._looks_like_path_var,
         smells_ast_source_detectors.detect_duplicate_constants,
         smells_ast_source_detectors.detect_vestigial_parameter,
-        smells_ast_tree_context_detectors._detect_hardcoded_path_sep,
+        smells_ast_tree_context_paths._detect_hardcoded_path_sep,
         smells_ast_tree_quality_detectors._detect_optional_param_sprawl,
         smells_ast_tree_quality_detectors_types._detect_optional_param_sprawl,
         smells_ast_tree_safety_detectors._detect_silent_except,

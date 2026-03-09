@@ -10,7 +10,8 @@
 - `_source_detectors.py`: source/import-resolution detectors
 - `_tree_safety_detectors.py`: security/safety oriented tree detectors
 - `_tree_quality_detectors.py`: maintainability/quality tree detectors
-- `_tree_context_detectors.py`: callback/path context detectors
+- `_tree_context_callbacks.py`: callback-parameter context detectors
+- `_tree_context_paths.py`: path-separator context detectors
 
 Public package exports are intentionally narrow in
 `smells_ast/__init__.py`.

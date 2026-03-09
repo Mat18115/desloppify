@@ -1,4 +1,4 @@
-"""Context-oriented tree-level smell detectors (callbacks, path handling)."""
+"""Tree-level smell detector for hardcoded path separator usage."""
 
 from __future__ import annotations
 
@@ -8,20 +8,6 @@ from desloppify.languages.python.detectors.smells_ast._helpers import (
     _iter_nodes,
     _looks_like_path_var,
 )
-
-_CALLBACK_LOG_NAMES = {
-    "dprint",
-    "debug_print",
-    "debug_func",
-    "log_func",
-    "print_fn",
-    "logger_func",
-    "log_callback",
-    "print_func",
-    "debug_log",
-    "verbose_print",
-    "trace_func",
-}
 
 
 def _path_like_name(obj: ast.AST) -> str:
@@ -89,59 +75,13 @@ def _match_startswith_slash(filepath: str, node: ast.Call) -> dict | None:
     return None
 
 
-def _detect_callback_logging(
-    filepath: str,
-    tree: ast.Module,
-    *,
-    all_nodes: tuple[ast.AST, ...] | None = None,
-) -> list[dict]:
-    """Flag functions that accept a logging callback parameter.
-
-    Detects parameters matching common logging-callback names (dprint, log_func, etc.)
-    that are actually called with string arguments in the function body.
-    """
-    results: list[dict] = []
-    for node in _iter_nodes(tree, all_nodes, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        # Check each parameter name
-        for arg in node.args.args + node.args.kwonlyargs:
-            name = arg.arg
-            if name not in _CALLBACK_LOG_NAMES:
-                continue
-
-            # Verify it's actually called in the body (not just accepted)
-            call_count = 0
-            for child in ast.walk(node):
-                if (
-                    isinstance(child, ast.Call)
-                    and isinstance(child.func, ast.Name)
-                    and child.func.id == name
-                ):
-                    call_count += 1
-
-            if call_count >= 1:
-                results.append(
-                    {
-                        "file": filepath,
-                        "line": node.lineno,
-                        "content": f"{node.name}({name}=...) — called {call_count} time(s)",
-                    }
-                )
-    return results
-
-
 def _detect_hardcoded_path_sep(
     filepath: str,
     tree: ast.Module,
     *,
     all_nodes: tuple[ast.AST, ...] | None = None,
 ) -> list[dict]:
-    """Flag .split('/') on path-like variables, and os.path.join mixed with '/'.
-
-    Detects two patterns:
-    1. path_var.split('/') — should use os.sep or normalize with replace('\\\\', '/')
-    2. f-strings or concatenation building paths with hardcoded '/' separators
-       on variables with path-like names
-    """
+    """Flag path-string checks that hardcode '/' separators."""
     results: list[dict] = []
     for node in _iter_nodes(tree, all_nodes, ast.Call):
         split_match = _match_split_slash(filepath, node)
@@ -152,3 +92,6 @@ def _detect_hardcoded_path_sep(
         if startswith_match is not None:
             results.append(startswith_match)
     return results
+
+
+__all__ = ["_detect_hardcoded_path_sep"]

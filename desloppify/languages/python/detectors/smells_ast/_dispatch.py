@@ -19,8 +19,10 @@ from desloppify.languages.python.detectors.smells_ast._node_detectors_nesting im
     _detect_mutable_ref_hack,
     _detect_nested_closures,
 )
-from desloppify.languages.python.detectors.smells_ast._tree_context_detectors import (
+from desloppify.languages.python.detectors.smells_ast._tree_context_callbacks import (
     _detect_callback_logging,
+)
+from desloppify.languages.python.detectors.smells_ast._tree_context_paths import (
     _detect_hardcoded_path_sep,
 )
 from desloppify.languages.python.detectors.smells_ast._tree_quality_detectors import (
