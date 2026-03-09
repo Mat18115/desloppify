@@ -232,7 +232,7 @@ def validate_completion(
     if unclustered:
         return False, f"{len(unclustered)} review issue(s) not in any cluster."
 
-    # Quality warnings (non-blocking but logged)
+    # Quality advisories (non-blocking but surfaced to caller)
     clusters = plan.get("clusters", {})
     # Check dependency ordering
     for name, c in clusters.items():
@@ -242,16 +242,18 @@ def validate_completion(
 
     # Check for all-trivial clusters
     all_trivial_clusters = []
-    total_steps = 0
     for name, c in clusters.items():
         if c.get("auto") or not c.get("issue_ids"):
             continue
         steps = c.get("action_steps") or []
-        total_steps += len(steps)
         if steps and all(
             isinstance(s, dict) and s.get("effort") == "trivial" for s in steps
         ):
             all_trivial_clusters.append(name)
+
+    if all_trivial_clusters:
+        names = ", ".join(sorted(all_trivial_clusters))
+        return True, f"Advisory: all action steps are marked trivial in cluster(s): {names}"
 
     return True, ""
 

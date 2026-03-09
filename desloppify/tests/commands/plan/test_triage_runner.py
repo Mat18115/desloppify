@@ -359,6 +359,38 @@ def test_validate_completion_self_dependency(tmp_path: Path) -> None:
     assert "depends on itself" in msg
 
 
+def test_validate_completion_surfaces_all_trivial_cluster_advisory(tmp_path: Path) -> None:
+    plan = _plan_with_stages(
+        observe={"report": "x" * 150, "confirmed_at": "t"},
+        reflect={"report": "x" * 150, "confirmed_at": "t"},
+        organize={"report": "x" * 150, "confirmed_at": "t"},
+        enrich={"report": "x" * 150, "confirmed_at": "t"},
+        **{"sense-check": {"report": "x" * 150, "confirmed_at": "t"}},
+    )
+    plan["clusters"] = {
+        "all-trivial": {
+            "issue_ids": ["review::a::b"],
+            "description": "test",
+            "action_steps": [
+                {
+                    "title": "rename constant",
+                    "detail": "Apply rename in src/foo.ts for consistency.",
+                    "issue_refs": ["review::a::b"],
+                    "effort": "trivial",
+                }
+            ],
+        }
+    }
+    ok, msg = validate_completion(
+        plan,
+        {"issues": {"review::a::b": {"status": "open", "detector": "review"}}},
+        tmp_path,
+    )
+    assert ok
+    assert msg.startswith("Advisory:")
+    assert "all-trivial" in msg
+
+
 # ---------- Sense-check prompts ----------
 
 
