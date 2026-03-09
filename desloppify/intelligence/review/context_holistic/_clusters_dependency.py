@@ -13,11 +13,12 @@ def _build_boundary_violations(by_detector: dict[str, list[dict]]) -> list[dict]
     for det_name in ("coupling", "layer_violation"):
         for issue in by_detector.get(det_name, []):
             filepath = issue.get("file", "")
-            detail = issue.get("detail", {})
-            if not isinstance(detail, dict):
-                detail = {}
-            target = detail.get("target") or detail.get("imported_from", "")
-            direction = detail.get("direction") or detail.get("violation", "")
+            target = _get_detail(issue, "target") or _get_detail(
+                issue, "imported_from", ""
+            )
+            direction = _get_detail(issue, "direction") or _get_detail(
+                issue, "violation", ""
+            )
             results.append(
                 {
                     "file": filepath,
@@ -49,12 +50,11 @@ def _build_private_crossings(by_detector: dict[str, list[dict]]) -> list[dict]:
     results: list[dict] = []
     for issue in by_detector.get("private_imports", []):
         filepath = issue.get("file", "")
-        detail = issue.get("detail", {})
-        if not isinstance(detail, dict):
-            detail = {}
-        symbol = detail.get("symbol") or detail.get("name", "")
-        source = detail.get("source") or detail.get("imported_from", "")
-        target = detail.get("target") or filepath
+        symbol = _get_detail(issue, "symbol") or _get_detail(issue, "name", "")
+        source = _get_detail(issue, "source") or _get_detail(
+            issue, "imported_from", ""
+        )
+        target = _get_detail(issue, "target") or filepath
         results.append(
             {
                 "file": filepath,

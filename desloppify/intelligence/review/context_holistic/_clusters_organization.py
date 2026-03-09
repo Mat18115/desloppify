@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._accessors import _get_signals, _safe_num
+from ._accessors import _get_detail, _get_signals, _safe_num
 
 
 def _build_flat_dir_issues(by_detector: dict[str, list[dict]]) -> list[dict]:
@@ -10,18 +10,15 @@ def _build_flat_dir_issues(by_detector: dict[str, list[dict]]) -> list[dict]:
     results: list[dict] = []
     for issue in by_detector.get("flat_dirs", []):
         filepath = issue.get("file", "")
-        detail = issue.get("detail", {})
-        if not isinstance(detail, dict):
-            detail = {}
-        kind = detail.get("kind") or detail.get("reason", "")
-        raw_score = detail.get("score")
+        kind = _get_detail(issue, "kind") or _get_detail(issue, "reason", "")
+        raw_score = _get_detail(issue, "score")
         if raw_score is None:
-            raw_score = detail.get("combined_score", 0)
+            raw_score = _get_detail(issue, "combined_score", 0)
         results.append(
             {
                 "directory": filepath,
                 "kind": kind,
-                "file_count": int(_safe_num(detail.get("file_count", 0))),
+                "file_count": int(_safe_num(_get_detail(issue, "file_count", 0))),
                 "combined_score": int(_safe_num(raw_score)),
             }
         )
