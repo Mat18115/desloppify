@@ -43,6 +43,17 @@ def _review_issue(*, issue_id: str, dimension: str, status: str = "open") -> dic
     }
 
 
+def _concern_issue(*, issue_id: str, dimension: str, status: str = "open") -> dict:
+    return {
+        "id": issue_id,
+        "detector": "concerns",
+        "status": status,
+        "file": ".",
+        "suppressed": False,
+        "detail": {"dimension": dimension},
+    }
+
+
 # -- review_rerun_preflight (gate logic) --------------------------------------
 
 
@@ -85,6 +96,24 @@ def test_subjective_review_backlog_blocks_preflight(capsys):
     state["issues"] = {
         "review::naming": _review_issue(
             issue_id="review::naming",
+            dimension="naming_quality",
+        )
+    }
+    with patch(_QUEUE_CONTEXT, return_value=_mock_queue_context(objective_count=0)):
+        with pytest.raises(CommandError) as exc:
+            review_rerun_preflight(state, _make_args())
+        assert exc.value.exit_code == 1
+
+    err = capsys.readouterr().err
+    assert "Open subjective queue item(s): 1" in err
+
+
+def test_subjective_concerns_backlog_blocks_preflight(capsys):
+    """Open concerns findings in scored dimensions block rerun preflight."""
+    state = _state_with_prior_review()
+    state["issues"] = {
+        "concerns::naming": _concern_issue(
+            issue_id="concerns::naming",
             dimension="naming_quality",
         )
     }
@@ -685,4 +714,3 @@ def test_merge_skips_preflight():
     ):
         cmd_review(_review_args(merge=True))
         mock_pf.assert_not_called()
-
