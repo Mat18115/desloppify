@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import desloppify.app.commands.plan.triage.display as display_mod
+import desloppify.app.commands.plan.triage.display_primitives as primitives_mod
 
 
 def test_print_stage_progress_shows_enrichment_gap(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(display_mod, "colorize", lambda text, _style: text)
-    monkeypatch.setattr(display_mod, "unenriched_clusters", lambda _plan: [("cluster-a", ["steps"])])
-    monkeypatch.setattr(display_mod, "manual_clusters_with_issues", lambda _plan: ["cluster-a"])
+    monkeypatch.setattr(primitives_mod, "colorize", lambda text, _style: text)
+    monkeypatch.setattr(primitives_mod, "unenriched_clusters", lambda _plan: [("cluster-a", ["steps"])])
+    monkeypatch.setattr(primitives_mod, "manual_clusters_with_issues", lambda _plan: ["cluster-a"])
 
     display_mod.print_stage_progress({"reflect": {}}, plan={"clusters": {}})
 

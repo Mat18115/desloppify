@@ -20,13 +20,12 @@ from desloppify.engine._plan.triage_playbook import (
 from desloppify.base.output.terminal import colorize
 
 from .helpers import find_cluster_for, manual_clusters_with_issues, open_review_ids_from_state, triage_coverage
+from .display_primitives import print_stage_progress
 from .stage_helpers import unenriched_clusters
 
 
 def print_dashboard_header(si: object, stages: dict, meta: dict, plan: dict) -> None:
     """Print the header section: title, open issues count, stage progress, overall status."""
-    from . import display as display_mod  # noqa: PLC0415
-
     print(colorize("  Epic triage — manual", "bold"))
     print(colorize("  " + "─" * 60, "dim"))
     print(f"  Open review issues: {len(si.open_issues)}")
@@ -48,7 +47,7 @@ def print_dashboard_header(si: object, stages: dict, meta: dict, plan: dict) -> 
         print(f"  Resolved since last triage: {len(si.resolved_since_last)}")
 
     print()
-    display_mod.print_stage_progress(stages, plan)
+    print_stage_progress(stages, plan)
     if meta.get("stage_refresh_required"):
         print(
             colorize(

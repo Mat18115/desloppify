@@ -21,6 +21,35 @@ from .stage_prompts import build_stage_prompt
 from .stage_validation import build_auto_attestation, validate_stage
 
 
+def _is_full_stage_run(stages_to_run: list[str]) -> bool:
+    """True when the pipeline was asked to run the full triage stage set."""
+    return set(stages_to_run) == set(STAGES)
+
+
+def _all_stage_results_successful(
+    *,
+    stages_to_run: list[str],
+    stage_results: dict[str, dict],
+) -> bool:
+    """True when each requested stage is confirmed or already confirmed."""
+    for stage in stages_to_run:
+        status = str(stage_results.get(stage, {}).get("status", ""))
+        if status not in {"confirmed", "skipped"}:
+            return False
+    return True
+
+
+def _print_not_finalized_message(reason: str) -> None:
+    """Emit a consistent next-step message when auto-completion is skipped/blocked."""
+    print(colorize(f"\n  Stages complete, triage not finalized ({reason}).", "yellow"))
+    print(
+        colorize(
+            '  Finalize manually: desloppify plan triage --complete --strategy "<execution plan>"',
+            "dim",
+        )
+    )
+
+
 def run_codex_pipeline(
     args: argparse.Namespace,
     *,
@@ -249,6 +278,29 @@ def run_codex_pipeline(
     if len(strategy) < 200:
         strategy = strategy + " " + "Automated triage via codex subagent pipeline. " * 3
 
+    should_auto_complete = (
+        _is_full_stage_run(stages_to_run)
+        and _all_stage_results_successful(
+            stages_to_run=stages_to_run,
+            stage_results=stage_results,
+        )
+    )
+    if not should_auto_complete:
+        total_elapsed = int(time.monotonic() - pipeline_start)
+        _print_not_finalized_message("partial stage run")
+        append_run_log(f"run-finished elapsed={total_elapsed}s finalized=false reason=partial_stage_run")
+        write_triage_run_summary(
+            run_dir,
+            stamp,
+            stages_to_run,
+            stage_results,
+            append_run_log,
+            finalized=False,
+            finalization_reason="partial_stage_run",
+        )
+        return
+
+    completed_before = meta.get("last_completed_at")
     print(colorize("\n  Completing triage...", "bold"))
 
     attestation = build_auto_attestation("sense-check", plan, si)
@@ -263,10 +315,38 @@ def run_codex_pipeline(
 
     _cmd_triage_complete(complete_args, services=resolved_services)
 
+    completed_after = (
+        resolved_services.load_plan()
+        .get("epic_triage_meta", {})
+        .get("last_completed_at")
+    )
     total_elapsed = int(time.monotonic() - pipeline_start)
+    if not completed_after or completed_after == completed_before:
+        _print_not_finalized_message("completion command blocked")
+        append_run_log(
+            f"run-finished elapsed={total_elapsed}s finalized=false reason=completion_blocked"
+        )
+        write_triage_run_summary(
+            run_dir,
+            stamp,
+            stages_to_run,
+            stage_results,
+            append_run_log,
+            finalized=False,
+            finalization_reason="completion_blocked",
+        )
+        return
+
     print(colorize(f"\n  Triage pipeline complete ({total_elapsed}s).", "green"))
-    append_run_log(f"run-finished elapsed={total_elapsed}s")
-    write_triage_run_summary(run_dir, stamp, stages_to_run, stage_results, append_run_log)
+    append_run_log(f"run-finished elapsed={total_elapsed}s finalized=true")
+    write_triage_run_summary(
+        run_dir,
+        stamp,
+        stages_to_run,
+        stage_results,
+        append_run_log,
+        finalized=True,
+    )
 
 
 def write_triage_run_summary(
@@ -275,6 +355,9 @@ def write_triage_run_summary(
     stages: list[str],
     stage_results: dict[str, dict],
     append_run_log,
+    *,
+    finalized: bool | None = None,
+    finalization_reason: str | None = None,
 ) -> None:
     """Write a run_summary.json with per-stage results."""
     summary = {
@@ -285,6 +368,10 @@ def write_triage_run_summary(
         "stage_results": stage_results,
         "run_dir": str(run_dir),
     }
+    if finalized is not None:
+        summary["finalized"] = finalized
+    if finalization_reason:
+        summary["finalization_reason"] = finalization_reason
     summary_path = run_dir / "run_summary.json"
     safe_write_text(summary_path, json.dumps(summary, indent=2) + "\n")
     print(colorize(f"  Run summary: {summary_path}", "dim"))

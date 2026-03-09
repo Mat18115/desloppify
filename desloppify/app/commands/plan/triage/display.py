@@ -5,11 +5,6 @@ from __future__ import annotations
 import argparse
 
 from desloppify.app.commands.helpers.display import short_issue_id
-from desloppify.engine._plan.triage_playbook import (
-    TRIAGE_CMD_CLUSTER_ENRICH_COMPACT,
-    TRIAGE_STAGE_DEPENDENCIES,
-    TRIAGE_STAGE_LABELS,
-)
 from desloppify.base.output.terminal import colorize
 from desloppify.base.output.user_message import print_user_message
 
@@ -18,41 +13,12 @@ from .display_layout import print_dashboard_header as _print_dashboard_header_im
 from .display_layout import print_issues_by_dimension as _print_issues_by_dimension_impl
 from .display_layout import print_prior_stage_reports as _print_prior_stage_reports_impl
 from .display_layout import show_plan_summary as _show_plan_summary_impl
+from .display_primitives import print_stage_progress
 from .helpers import (
-    manual_clusters_with_issues,
     print_cascade_clear_feedback,
     triage_coverage,
 )
 from .services import TriageServices, default_triage_services
-from .stage_helpers import unenriched_clusters
-
-
-def print_stage_progress(stages: dict, plan: dict | None = None) -> None:
-    """Print the stage progress indicator."""
-    print(colorize("  Stages:", "dim"))
-    for stage_name, label in TRIAGE_STAGE_LABELS:
-        if stage_name in stages:
-            if stages[stage_name].get("confirmed_at"):
-                print(colorize(f"    ✓ {label} (confirmed)", "green"))
-            else:
-                print(colorize(f"    ✓ {label} (needs confirm)", "yellow"))
-        elif TRIAGE_STAGE_DEPENDENCIES[stage_name].issubset(stages):
-            print(colorize(f"    → {label} (current)", "yellow"))
-        else:
-            print(colorize(f"    ○ {label}", "dim"))
-
-    if plan and "reflect" in stages and "organize" not in stages:
-        gaps = unenriched_clusters(plan)
-        manual = manual_clusters_with_issues(plan)
-        if not manual:
-            print(colorize("\n    No manual clusters yet. Create clusters and enrich them.", "yellow"))
-        elif gaps:
-            print(colorize(f"\n    {len(gaps)} cluster(s) need enrichment:", "yellow"))
-            for name, missing in gaps:
-                print(colorize(f"      {name}: missing {', '.join(missing)}", "yellow"))
-            print(colorize(f"      Fix: {TRIAGE_CMD_CLUSTER_ENRICH_COMPACT}", "dim"))
-        else:
-            print(colorize(f"\n    All {len(manual)} manual cluster(s) enriched.", "green"))
 
 
 def print_progress(plan: dict, open_issues: dict) -> None:

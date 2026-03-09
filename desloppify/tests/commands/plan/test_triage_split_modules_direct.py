@@ -14,7 +14,6 @@ import desloppify.app.commands.plan.triage._stage_validation_enrich_checks as en
 import desloppify.app.commands.plan.triage.confirmations_basic as confirmations_basic_mod
 import desloppify.app.commands.plan.triage.confirmations_enrich as confirmations_enrich_mod
 import desloppify.app.commands.plan.triage.confirmations_organize as confirmations_organize_mod
-import desloppify.app.commands.plan.triage.display as triage_display_mod
 import desloppify.app.commands.plan.triage.display_layout as display_layout_mod
 import desloppify.app.commands.plan.triage.runner.orchestrator_claude as orchestrator_claude_mod
 import desloppify.app.commands.plan.triage.runner.orchestrator_codex_observe as orchestrator_observe_mod
@@ -204,7 +203,7 @@ def test_validate_attestation_rules() -> None:
 
 def test_display_layout_renderers(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
-        triage_display_mod,
+        display_layout_mod,
         "print_stage_progress",
         lambda _stages, _plan: print("stage-progress"),
     )
@@ -355,6 +354,49 @@ def test_orchestrator_pipeline_summary_writer(tmp_path) -> None:
     text = summary_path.read_text(encoding="utf-8")
     assert '"runner": "codex"' in text
     assert messages
+
+
+def test_orchestrator_pipeline_completion_guards() -> None:
+    assert orchestrator_pipeline_mod._is_full_stage_run(
+        ["observe", "reflect", "organize", "enrich", "sense-check"]
+    ) is True
+    assert orchestrator_pipeline_mod._is_full_stage_run(["observe", "reflect"]) is False
+
+    assert orchestrator_pipeline_mod._all_stage_results_successful(
+        stages_to_run=["observe", "reflect"],
+        stage_results={
+            "observe": {"status": "confirmed"},
+            "reflect": {"status": "skipped"},
+        },
+    ) is True
+    assert orchestrator_pipeline_mod._all_stage_results_successful(
+        stages_to_run=["observe", "reflect"],
+        stage_results={
+            "observe": {"status": "confirmed"},
+            "reflect": {"status": "failed"},
+        },
+    ) is False
+
+
+def test_orchestrator_pipeline_summary_writer_includes_finalization_fields(tmp_path) -> None:
+    run_dir = tmp_path / "run2"
+    run_dir.mkdir(parents=True)
+    messages: list[str] = []
+
+    orchestrator_pipeline_mod.write_triage_run_summary(
+        run_dir,
+        stamp="20260309_120001",
+        stages=["observe", "reflect"],
+        stage_results={"observe": {"status": "confirmed"}},
+        append_run_log=messages.append,
+        finalized=False,
+        finalization_reason="partial_stage_run",
+    )
+
+    summary_path = run_dir / "run_summary.json"
+    text = summary_path.read_text(encoding="utf-8")
+    assert '"finalized": false' in text
+    assert '"finalization_reason": "partial_stage_run"' in text
 
 
 def test_orchestrator_pipeline_entrypoint_is_exposed() -> None:

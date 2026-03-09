@@ -1,4 +1,4 @@
-"""Thin wrapper around review runner_process for triage stage execution."""
+"""Thin wrapper around shared codex process runner for triage execution."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from desloppify.app.commands.review._runner_process_types import CodexBatchRunnerDeps
-from desloppify.app.commands.review.runner_process import (
+from desloppify.app.runner.codex_process import (
+    CodexBatchRunnerDeps,
     codex_batch_command,
     run_codex_batch,
 )

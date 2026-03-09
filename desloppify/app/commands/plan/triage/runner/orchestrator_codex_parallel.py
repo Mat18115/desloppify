@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from desloppify.app.commands.review._runner_parallel_types import (
+from desloppify.app.runner.codex_process import (
     BatchExecutionOptions,
     BatchProgressEvent,
+    execute_batches,
 )
-from desloppify.app.commands.review.runner_parallel import execute_batches
 from desloppify.base.output.terminal import colorize
 
 
@@ -57,4 +57,3 @@ def run_parallel_batches(
 
 
 __all__ = ["run_parallel_batches"]
-
