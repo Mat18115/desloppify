@@ -5,11 +5,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import desloppify.engine._plan._sync_context as sync_context_mod
+import desloppify.engine._plan.auto_cluster_sync_issue as auto_cluster_sync_mod
 import desloppify.engine._plan.epic_triage_dismiss as triage_dismiss_mod
 import desloppify.engine._plan.reconcile_review_import as reconcile_import_mod
 import desloppify.engine._plan.schema.helpers as schema_helpers_mod
 import desloppify.engine._plan.sync_auto_prune as sync_auto_prune_mod
 import desloppify.engine._plan.sync_workflow as sync_workflow_mod
+import desloppify.engine._plan.triage_playbook as triage_playbook_mod
 import desloppify.engine._scoring.state_integration_subjective as scoring_subjective_mod
 import desloppify.engine._work_queue.lifecycle as lifecycle_mod
 
@@ -121,6 +123,159 @@ def test_sync_auto_prune_removes_stale_auto_clusters_and_cleans_overrides() -> N
     assert "auto-a" not in clusters
     assert plan["overrides"]["id1"]["cluster"] is None
     assert plan["active_cluster"] is None
+
+
+def test_auto_cluster_grouping_filters_to_open_unsuppressed_non_manual_items(
+    monkeypatch,
+) -> None:
+    clusters = {
+        "manual/one": {"auto": False, "issue_ids": ["manual-1"]},
+        "auto/one": {"auto": True, "issue_ids": ["auto-1"]},
+    }
+    manual_ids = auto_cluster_sync_mod._manual_member_ids(clusters)
+    assert manual_ids == {"manual-1"}
+
+    monkeypatch.setattr(
+        auto_cluster_sync_mod,
+        "_grouping_key",
+        lambda issue, _meta: f"{issue.get('detector')}::bucket",
+    )
+    monkeypatch.setitem(auto_cluster_sync_mod.DETECTORS, "unused", {"name": "unused"})
+
+    issues = {
+        "manual-1": {"status": "open", "suppressed": False, "detector": "unused"},
+        "open-1": {"status": "open", "suppressed": False, "detector": "unused"},
+        "open-2": {"status": "open", "suppressed": False, "detector": "unused"},
+        "closed": {"status": "fixed", "suppressed": False, "detector": "unused"},
+        "suppressed": {"status": "open", "suppressed": True, "detector": "unused"},
+    }
+
+    grouped, issue_data = auto_cluster_sync_mod._group_clusterable_issues(
+        issues,
+        manual_member_ids=manual_ids,
+    )
+    assert grouped == {"unused::bucket": ["open-1", "open-2"]}
+    assert set(issue_data) == {"open-1", "open-2"}
+
+
+def test_auto_cluster_sync_helpers_cover_create_update_and_user_modified_paths() -> None:
+    plan = {"overrides": {"id-a": {"issue_id": "id-a", "created_at": "t0"}}}
+    clusters = {"manual/keep": {"issue_ids": ["id-a"]}}
+
+    changes = auto_cluster_sync_mod._sync_user_modified_cluster_members(
+        plan,
+        clusters=clusters,
+        existing_name="manual/keep",
+        member_ids=["id-a", "id-b"],
+        now="t1",
+    )
+    assert changes == 1
+    assert clusters["manual/keep"]["issue_ids"] == ["id-a", "id-b"]
+    assert plan["overrides"]["id-b"]["cluster"] == "manual/keep"
+
+    plan = {"overrides": {}}
+    clusters = {}
+    by_key: dict[str, str] = {}
+
+    created = auto_cluster_sync_mod._sync_auto_cluster(
+        plan,
+        clusters,
+        by_key,
+        cluster_key="unused::bucket",
+        cluster_name="auto/unused",
+        member_ids=["id-1", "id-2"],
+        description="desc",
+        action="act",
+        now="now",
+        optional=True,
+    )
+    assert created.created is True
+    assert created.changed is True
+    assert clusters["auto/unused"]["optional"] is True
+    assert plan["overrides"]["id-1"]["cluster"] == "auto/unused"
+
+    unchanged = auto_cluster_sync_mod._sync_auto_cluster(
+        plan,
+        clusters,
+        by_key,
+        cluster_key="unused::bucket",
+        cluster_name="auto/unused",
+        member_ids=["id-1", "id-2"],
+        description="desc",
+        action="act",
+        now="later",
+    )
+    assert unchanged.created is False
+    assert unchanged.changed is False
+
+    updated = auto_cluster_sync_mod._sync_auto_cluster(
+        plan,
+        clusters,
+        by_key,
+        cluster_key="unused::bucket",
+        cluster_name="auto/unused",
+        member_ids=["id-2", "id-3"],
+        description="desc2",
+        action="act2",
+        now="later",
+    )
+    assert updated.changed is True
+    assert clusters["auto/unused"]["issue_ids"] == ["id-2", "id-3"]
+
+
+def test_sync_issue_clusters_handles_name_collisions_and_user_modified_clusters(
+    monkeypatch,
+) -> None:
+    plan = {"overrides": {}}
+    clusters = {
+        "auto/shared": {
+            "auto": True,
+            "cluster_key": "unused::manual::one",
+            "issue_ids": ["id-a"],
+            "user_modified": True,
+        }
+    }
+    existing_by_key = {"unused::manual::one": "auto/shared"}
+    active_keys: set[str] = set()
+
+    issues = {
+        "id-a": {"detector": "unused"},
+        "id-b": {"detector": "unused"},
+        "id-c": {"detector": "unused"},
+        "id-d": {"detector": "unused"},
+    }
+
+    monkeypatch.setattr(
+        auto_cluster_sync_mod,
+        "_group_clusterable_issues",
+        lambda *_a, **_k: (
+            {
+                "unused::manual::one": ["id-a", "id-b"],
+                "unused::new::two": ["id-c", "id-d"],
+            },
+            issues,
+        ),
+    )
+    monkeypatch.setattr(auto_cluster_sync_mod, "_cluster_name_from_key", lambda _k: "auto/shared")
+    monkeypatch.setattr(auto_cluster_sync_mod, "_generate_description", lambda *_a, **_k: "desc")
+    monkeypatch.setattr(auto_cluster_sync_mod, "_generate_action", lambda *_a, **_k: "act")
+    monkeypatch.setitem(auto_cluster_sync_mod.DETECTORS, "unused", {"name": "unused"})
+
+    changes = auto_cluster_sync_mod.sync_issue_clusters(
+        plan,
+        issues,
+        clusters,
+        existing_by_key,
+        active_keys,
+        now="2026-03-09T00:00:00+00:00",
+    )
+
+    assert changes == 2
+    assert clusters["auto/shared"]["issue_ids"] == ["id-a", "id-b"]
+    assert "auto/shared-2" in clusters
+    assert existing_by_key["unused::new::two"] == "auto/shared-2"
+    assert plan["overrides"]["id-c"]["cluster"] == "auto/shared-2"
+    assert active_keys == {"unused::manual::one", "unused::new::two"}
 
 
 def test_sync_workflow_helpers_inject_expected_items(monkeypatch) -> None:
@@ -240,3 +395,41 @@ def test_lifecycle_filter_forces_triage_when_only_subjective_clusters() -> None:
     filtered = lifecycle_mod.apply_lifecycle_filter(items)
     # Subjective cluster is not objective — triage should be forced
     assert any(str(item.get("id", "")).startswith("triage::") for item in filtered)
+
+
+def test_triage_playbook_commands_cover_runner_and_stage_validation() -> None:
+    assert triage_playbook_mod.triage_run_stages_command() == (
+        "desloppify plan triage --run-stages --runner codex"
+    )
+    assert triage_playbook_mod.triage_run_stages_command(
+        runner="claude", only_stages=("observe", "reflect")
+    ) == "desloppify plan triage --run-stages --runner claude --only-stages observe,reflect"
+
+    try:
+        triage_playbook_mod.triage_run_stages_command(runner="other")
+    except ValueError as exc:
+        assert "Unsupported triage runner" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Expected unsupported runner to raise")
+
+    try:
+        triage_playbook_mod.triage_run_stages_command(only_stages=("observe", "commit"))
+    except ValueError as exc:
+        assert "Unsupported triage stage" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Expected unsupported stage to raise")
+
+    runner_cmds = triage_playbook_mod.triage_runner_commands(only_stages="observe")
+    assert runner_cmds[0][0] == "Codex"
+    assert runner_cmds[1][0] == "Claude"
+    assert triage_playbook_mod.triage_manual_stage_command("reflect") == (
+        triage_playbook_mod.TRIAGE_CMD_REFLECT
+    )
+    assert triage_playbook_mod.TRIAGE_STAGE_DEPENDENCIES["commit"] == {"sense-check"}
+
+    try:
+        triage_playbook_mod.triage_manual_stage_command("nope")
+    except ValueError as exc:
+        assert "Unsupported triage stage" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Expected invalid stage to raise")
