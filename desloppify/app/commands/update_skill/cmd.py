@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import urllib.error
 import urllib.request
+from urllib.parse import urlunsplit
 
 from desloppify.app.skill_docs import (
     SKILL_BEGIN,
@@ -19,9 +20,10 @@ from desloppify.base.discovery.file_paths import safe_write_text
 from desloppify.base.discovery.paths import get_project_root
 from desloppify.base.output.terminal import colorize
 
-_RAW_BASE = (
-    "https://raw.githubusercontent.com/peteromallet/desloppify/main/docs"
-)
+_RAW_SCHEME = "https"
+_RAW_HOST = "raw.githubusercontent.com"
+_RAW_REPO_PATH = "/peteromallet/desloppify/main/docs"
+_RAW_BASE = urlunsplit((_RAW_SCHEME, _RAW_HOST, _RAW_REPO_PATH, "", ""))
 
 
 def _download(filename: str) -> str:

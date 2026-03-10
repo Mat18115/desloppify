@@ -48,7 +48,7 @@ def do_prepare(
             )
         else:
             msg += "\nHint: pass --path <dir> matching the path used during scan."
-        raise CommandError(msg, exit_code=1)
+        raise CommandError(msg, exit_code=1) from exc
 
     write_query(data)
     _print_prepare_summary(
