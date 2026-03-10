@@ -6,6 +6,7 @@ import hashlib
 import json
 import subprocess
 import sys
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import cast
@@ -94,6 +95,18 @@ ABSTRACTION_COMPONENT_NAMES = {
     "definition_directness": "Definition Directness",
     "type_discipline": "Type Discipline",
 }
+
+
+@dataclass(frozen=True)
+class _BatchRunRequest:
+    args: object
+    state: dict
+    lang: object
+    state_file: str
+    config: dict[str, object]
+    project_root: Path
+    subagent_runs_dir: Path
+    deps: review_batches_mod.BatchRunDeps
 
 
 def _batch_live_log_interval_seconds(heartbeat_seconds: float) -> float:
@@ -217,6 +230,59 @@ def _build_batch_run_deps(*, policy, project_root: Path) -> review_batches_mod.B
         ),
         safe_write_text_fn=safe_write_text,
         colorize_fn=colorize,
+    )
+
+
+def _build_batch_run_request(
+    args,
+    state: dict,
+    lang,
+    state_file: str,
+    *,
+    config: dict | None,
+) -> _BatchRunRequest:
+    from ..runtime.policy import resolve_batch_run_policy
+
+    project_root = _runtime_project_root()
+    request_config = dict(config or {})
+    policy = resolve_batch_run_policy(args)
+    return _BatchRunRequest(
+        args=args,
+        state=state,
+        lang=lang,
+        state_file=state_file,
+        config=request_config,
+        project_root=project_root,
+        subagent_runs_dir=_subagent_runs_dir(),
+        deps=_build_batch_run_deps(
+            policy=policy,
+            project_root=project_root,
+        ),
+    )
+
+
+def _run_batch_request(request: _BatchRunRequest) -> None:
+    prepared = review_batch_phases_mod.prepare_batch_run(
+        args=request.args,
+        state=request.state,
+        lang=request.lang,
+        config=request.config,
+        deps=request.deps,
+        project_root=request.project_root,
+        subagent_runs_dir=request.subagent_runs_dir,
+    )
+    if prepared is None:
+        return
+
+    executed = review_batch_phases_mod.execute_batch_run(
+        prepared=prepared,
+        deps=request.deps,
+    )
+    review_batch_phases_mod.merge_and_import_batch_run(
+        prepared=prepared,
+        executed=executed,
+        state_file=request.state_file,
+        deps=request.deps,
     )
 
 def _config_hash_for_packet_contract(config: dict | None) -> str:
@@ -456,37 +522,14 @@ def _load_or_prepare_packet(
 
 def do_run_batches(args, state, lang, state_file, config: dict | None = None) -> None:
     """Run holistic investigation batches with a local subagent runner."""
-    from ..runtime.policy import resolve_batch_run_policy
-
-    runtime_project_root = _runtime_project_root()
-    subagent_runs_dir = _subagent_runs_dir()
-    policy = resolve_batch_run_policy(args)
-    batch_deps = _build_batch_run_deps(
-        policy=policy,
-        project_root=runtime_project_root,
+    request = _build_batch_run_request(
+        args,
+        state,
+        lang,
+        state_file,
+        config=config,
     )
-    prepared = review_batch_phases_mod.prepare_batch_run(
-        args=args,
-        state=state,
-        lang=lang,
-        config=config or {},
-        deps=batch_deps,
-        project_root=runtime_project_root,
-        subagent_runs_dir=subagent_runs_dir,
-    )
-    if prepared is None:
-        return
-
-    executed = review_batch_phases_mod.execute_batch_run(
-        prepared=prepared,
-        deps=batch_deps,
-    )
-    review_batch_phases_mod.merge_and_import_batch_run(
-        prepared=prepared,
-        executed=executed,
-        state_file=state_file,
-        deps=batch_deps,
-    )
+    _run_batch_request(request)
 
 def _validate_run_dir(run_dir: Path) -> tuple[dict, Path, str]:
     """Validate run directory, load summary, and return (summary, blind_packet_path, immutable_packet_path).
