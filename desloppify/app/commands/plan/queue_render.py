@@ -10,11 +10,7 @@ from desloppify.app.commands.helpers.queue_progress import (
     format_queue_headline,
 )
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import (
-    has_saved_plan_without_scan,
-    recover_state_from_saved_plan,
-    require_completed_scan,
-)
+from desloppify.app.commands.helpers.state import require_completed_scan
 from desloppify.base.output.terminal import colorize, print_table
 from desloppify.engine._work_queue.core import (
     QueueBuildOptions,
@@ -250,23 +246,14 @@ def cmd_plan_queue(args: argparse.Namespace) -> None:
     """Render a compact table of all upcoming queue items."""
     runtime = command_runtime(args)
     state = runtime.state
-    plan = load_plan()
-    if not state.get("last_scan"):
-        if has_saved_plan_without_scan(state, plan):
-            print(
-                colorize(
-                    "  No scan state found; rendering queue from saved plan metadata only.",
-                    "yellow",
-                )
-            )
-            state = recover_state_from_saved_plan(state, plan)
-        elif not require_completed_scan(state):
-            return
+    if not require_completed_scan(state):
+        return
 
     top = getattr(args, "top", 30)
     cluster_filter = getattr(args, "cluster", None)
     include_skipped = bool(getattr(args, "include_skipped", False))
 
+    plan = load_plan()
     print_triage_guardrail_info(plan=plan, state=state)
 
     effective_cluster = _resolve_effective_cluster(plan, cluster_filter)

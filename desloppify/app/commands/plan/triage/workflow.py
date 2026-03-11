@@ -4,15 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
-from dataclasses import replace
-from types import SimpleNamespace
 
-from desloppify.app.commands.helpers.runtime import CommandRuntime
-from desloppify.app.commands.helpers.state import (
-    has_saved_plan_without_scan,
-    recover_state_from_saved_plan,
-)
-from desloppify.base.output.terminal import colorize
 from desloppify.engine.plan_triage import TRIAGE_CMD_OBSERVE
 
 from . import helpers as _helpers_mod
@@ -165,38 +157,8 @@ def run_triage_workflow(
     """Route `plan triage` args through one orchestration seam."""
     runtime = services.command_runtime(args)
     state = runtime.state
-    plan = services.load_plan()
-    if not state.get("last_scan"):
-        if has_saved_plan_without_scan(state, plan):
-            print(
-                colorize(
-                    "  No scan state found; continuing triage from saved plan metadata only.",
-                    "yellow",
-                )
-            )
-            state = recover_state_from_saved_plan(state, plan)
-            recovered_runtime = CommandRuntime(
-                config=runtime.config,
-                state=state,
-                state_path=runtime.state_path,
-            )
-            setattr(
-                args,
-                "runtime",
-                recovered_runtime,
-            )
-            runtime_override = lambda _args: recovered_runtime
-            if isinstance(services, TriageServices):
-                services = replace(
-                    services,
-                    command_runtime=runtime_override,
-                )
-            else:
-                service_attrs = dict(vars(services))
-                service_attrs["command_runtime"] = runtime_override
-                services = SimpleNamespace(**service_attrs)
-        elif not require_completed_scan_fn(state):
-            return
+    if not require_completed_scan_fn(state):
+        return
 
     if getattr(args, "stage_prompt", None):
         cmd_stage_prompt(args, services=services)

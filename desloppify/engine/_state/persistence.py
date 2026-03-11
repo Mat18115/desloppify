@@ -21,6 +21,12 @@ __all__ = [
 
 from desloppify.base.discovery.file_paths import safe_write_text
 from desloppify.base.text_utils import is_numeric
+from desloppify.engine._plan.persistence import load_plan as load_plan_state
+from desloppify.engine._plan.persistence import plan_path_for_state
+from desloppify.engine._state.recovery import (
+    has_saved_plan_without_scan,
+    recover_runtime_state_from_saved_plan,
+)
 from desloppify.engine._state.schema import (
     CURRENT_VERSION,
     StateModel,
@@ -66,11 +72,24 @@ def _normalize_loaded_state(data: object) -> dict[str, object]:
     return normalized
 
 
+def _recover_from_saved_plan_if_available(
+    state_path: Path,
+    state: StateModel,
+) -> StateModel:
+    try:
+        plan = load_plan_state(plan_path_for_state(state_path))
+    except Exception:
+        return state
+    if not has_saved_plan_without_scan(state, plan):
+        return state
+    return cast(StateModel, recover_runtime_state_from_saved_plan(state, plan))
+
+
 def load_state(path: Path | None = None) -> StateModel:
     """Load state from disk, or return empty state on missing/corruption."""
     state_path = path or _default_state_file()
     if not state_path.exists():
-        return empty_state()
+        return _recover_from_saved_plan_if_available(state_path, empty_state())
 
     try:
         data = _load_json(state_path)
@@ -94,7 +113,8 @@ def load_state(path: Path | None = None) -> StateModel:
                     f"  ⚠ State file corrupted ({ex}), loaded from backup.",
                     file=sys.stderr,
                 )
-                return _normalize_loaded_state(backup_data)
+                normalized_backup = _normalize_loaded_state(backup_data)
+                return _recover_from_saved_plan_if_available(state_path, normalized_backup)
             except (
                 json.JSONDecodeError,
                 UnicodeDecodeError,
@@ -130,7 +150,7 @@ def load_state(path: Path | None = None) -> StateModel:
             logger.debug(
                 "Corrupted state file retained at original path: %s", state_path
             )
-        return empty_state()
+        return _recover_from_saved_plan_if_available(state_path, empty_state())
 
     version = data.get("version", 1)
     if version > CURRENT_VERSION:
@@ -142,7 +162,8 @@ def load_state(path: Path | None = None) -> StateModel:
         )
 
     try:
-        return _normalize_loaded_state(data)
+        normalized = _normalize_loaded_state(data)
+        return _recover_from_saved_plan_if_available(state_path, normalized)
     except (ValueError, TypeError, AttributeError) as normalize_ex:
         logger.warning(
             "State invariants invalid for %s; falling back to empty state: %s",
@@ -153,7 +174,7 @@ def load_state(path: Path | None = None) -> StateModel:
             f"  ⚠ State invariants invalid ({normalize_ex}). Starting fresh.",
             file=sys.stderr,
         )
-        return empty_state()
+        return _recover_from_saved_plan_if_available(state_path, empty_state())
 
 
 def _coerce_integrity_target(value: object) -> float | None:

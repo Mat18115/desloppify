@@ -127,24 +127,28 @@ def resolve_interface(
     return None
 
 
-def update_installed_skill(interface: str) -> bool:
-    """Download and install the skill document for the given interface.
-
-    Returns True on success, False on failure. Prints status messages.
-    """
+def _update_installed_skill_with_deps(
+    interface: str,
+    *,
+    download_fn,
+    get_project_root_fn,
+    safe_write_text_fn,
+    colorize_fn,
+) -> bool:
+    """Download and install the skill document for the given interface."""
     target_rel, overlay_name, dedicated = SKILL_TARGETS[interface]
-    target_path = get_project_root() / target_rel
+    target_path = get_project_root_fn() / target_rel
 
-    print(colorize(f"Downloading skill document ({interface})...", "dim"))
+    print(colorize_fn(f"Downloading skill document ({interface})...", "dim"))
     try:
-        skill_content = _download("SKILL.md")
-        overlay_content = _download(f"{overlay_name}.md") if overlay_name else None
+        skill_content = download_fn("SKILL.md")
+        overlay_content = download_fn(f"{overlay_name}.md") if overlay_name else None
     except (urllib.error.URLError, OSError) as exc:
-        print(colorize(f"Download failed: {exc}", "red"))
+        print(colorize_fn(f"Download failed: {exc}", "red"))
         return False
 
     if "desloppify-skill-version" not in skill_content:
-        print(colorize("Downloaded content doesn't look like a skill document.", "red"))
+        print(colorize_fn("Downloaded content doesn't look like a skill document.", "red"))
         return False
 
     new_section = _build_section(skill_content, overlay_content)
@@ -160,12 +164,12 @@ def update_installed_skill(interface: str) -> bool:
     else:
         result = new_section
 
-    safe_write_text(target_path, result)
+    safe_write_text_fn(target_path, result)
 
     version_match = SKILL_VERSION_RE.search(new_section)
     version = version_match.group(1) if version_match else "?"
     print(
-        colorize(
+        colorize_fn(
             f"Updated {target_rel} (v{version}, tool expects v{SKILL_VERSION})",
             "green",
         )
@@ -173,12 +177,32 @@ def update_installed_skill(interface: str) -> bool:
     return True
 
 
-def cmd_update_skill(args: argparse.Namespace) -> None:
-    """Install or update the desloppify skill document."""
-    interface = resolve_interface(getattr(args, "interface", None))
+def update_installed_skill(interface: str) -> bool:
+    """Download and install the skill document for the given interface.
+
+    Returns True on success, False on failure. Prints status messages.
+    """
+    return _update_installed_skill_with_deps(
+        interface,
+        download_fn=_download,
+        get_project_root_fn=get_project_root,
+        safe_write_text_fn=safe_write_text,
+        colorize_fn=colorize,
+    )
+
+
+def _run_cmd_update_skill(
+    args: argparse.Namespace,
+    *,
+    resolve_interface_fn,
+    update_installed_skill_fn,
+    colorize_fn,
+) -> None:
+    """Run the update-skill command with injectable package seams."""
+    interface = resolve_interface_fn(getattr(args, "interface", None))
 
     if not interface:
-        print(colorize("No installed skill document found.", "yellow"))
+        print(colorize_fn("No installed skill document found.", "yellow"))
         print()
         names = ", ".join(sorted(SKILL_TARGETS))
         print(f"Install with: desloppify update-skill <{names}>")
@@ -186,8 +210,18 @@ def cmd_update_skill(args: argparse.Namespace) -> None:
 
     if interface not in SKILL_TARGETS:
         names = ", ".join(sorted(SKILL_TARGETS))
-        print(colorize(f"Unknown interface '{interface}'.", "red"))
+        print(colorize_fn(f"Unknown interface '{interface}'.", "red"))
         print(f"Available: {names}")
         return
 
-    update_installed_skill(interface)
+    update_installed_skill_fn(interface)
+
+
+def cmd_update_skill(args: argparse.Namespace) -> None:
+    """Install or update the desloppify skill document."""
+    _run_cmd_update_skill(
+        args,
+        resolve_interface_fn=resolve_interface,
+        update_installed_skill_fn=update_installed_skill,
+        colorize_fn=colorize,
+    )

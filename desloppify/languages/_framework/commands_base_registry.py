@@ -59,6 +59,30 @@ def compose_detect_registry(
     return registry
 
 
+def build_composed_detect_registry(
+    *,
+    cmd_deps: Callable[[argparse.Namespace], None],
+    cmd_cycles: Callable[[argparse.Namespace], None],
+    cmd_orphaned: Callable[[argparse.Namespace], None],
+    cmd_dupes: Callable[[argparse.Namespace], None],
+    cmd_large: Callable[[argparse.Namespace], None],
+    cmd_complexity: Callable[[argparse.Namespace], None],
+    extra_registry: dict[str, Callable[[argparse.Namespace], None]] | None = None,
+) -> dict[str, Callable[[argparse.Namespace], None]]:
+    """Build the standard detect registry and apply optional extras."""
+    return compose_detect_registry(
+        base_registry=build_standard_detect_registry(
+            cmd_deps=cmd_deps,
+            cmd_cycles=cmd_cycles,
+            cmd_orphaned=cmd_orphaned,
+            cmd_dupes=cmd_dupes,
+            cmd_large=cmd_large,
+            cmd_complexity=cmd_complexity,
+        ),
+        extra_registry=extra_registry,
+    )
+
+
 def make_cmd_deps(
     *,
     build_dep_graph_fn: Callable[..., Any],

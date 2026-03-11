@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from desloppify.engine._plan.schema.helpers import (
@@ -14,6 +15,7 @@ from desloppify.engine._state.schema import utc_now
 
 V7_SCHEMA_VERSION = 7
 V8_SCHEMA_VERSION = 8
+_HEX_SUFFIX_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
 def _rename_key(d: dict, old: str, new: str) -> bool:
@@ -79,12 +81,112 @@ def migrate_deferred_to_skipped(plan: dict[str, Any]) -> None:
     deferred.clear()
 
 
+def _normalize_cluster_issue_id(raw_id: object) -> str | None:
+    if not isinstance(raw_id, str):
+        return None
+    issue_id = raw_id.strip()
+    if not issue_id:
+        return None
+    if not (
+        issue_id.startswith("review::")
+        or issue_id.startswith("concerns::")
+    ):
+        return None
+    parts = issue_id.split("::")
+    if len(parts) >= 2 and _HEX_SUFFIX_RE.fullmatch(parts[-1]):
+        return "::".join(parts[:-1])
+    return issue_id
+
+
+def _execution_log_cluster_members(
+    plan: dict[str, Any],
+) -> tuple[dict[str, list[str]], dict[str, str]]:
+    members: dict[str, list[str]] = {}
+    hash_lookup: dict[str, str] = {}
+
+    def _append(cluster_name: str, issue_ids: list[str]) -> None:
+        bucket = members.setdefault(cluster_name, [])
+        seen = set(bucket)
+        for issue_id in issue_ids:
+            if issue_id in seen:
+                continue
+            seen.add(issue_id)
+            bucket.append(issue_id)
+            parts = issue_id.split("::")
+            if parts and _HEX_SUFFIX_RE.fullmatch(parts[-1]):
+                hash_lookup[parts[-1]] = issue_id
+
+    for entry in plan.get("execution_log", []):
+        if not isinstance(entry, dict):
+            continue
+        cluster_name = entry.get("cluster_name")
+        if not isinstance(cluster_name, str) or not cluster_name.strip():
+            continue
+        cluster_name = cluster_name.strip()
+        action = entry.get("action")
+        if action == "cluster_delete":
+            members.pop(cluster_name, None)
+            continue
+
+        normalized_issue_ids = [
+            issue_id
+            for raw_id in entry.get("issue_ids", [])
+            if (issue_id := _normalize_cluster_issue_id(raw_id)) is not None
+        ]
+        if not normalized_issue_ids:
+            continue
+
+        if action == "cluster_remove":
+            bucket = members.get(cluster_name, [])
+            if bucket:
+                remove_set = set(normalized_issue_ids)
+                members[cluster_name] = [
+                    issue_id for issue_id in bucket if issue_id not in remove_set
+                ]
+            continue
+
+        if action in {"cluster_add", "cluster_create", "cluster_update"}:
+            _append(cluster_name, normalized_issue_ids)
+
+    return members, hash_lookup
+
+
 def normalize_cluster_defaults(plan: dict[str, Any]) -> None:
+    recovered_members, hash_lookup = _execution_log_cluster_members(plan)
+
     for cluster in plan["clusters"].values():
         if not isinstance(cluster, dict):
             continue
         if not isinstance(cluster.get("issue_ids"), list):
             cluster["issue_ids"] = []
+
+        normalized_issue_ids: list[str] = []
+        seen: set[str] = set()
+
+        def _append(raw_id: object) -> None:
+            issue_id = _normalize_cluster_issue_id(raw_id)
+            if issue_id is None and isinstance(raw_id, str) and _HEX_SUFFIX_RE.fullmatch(raw_id):
+                issue_id = hash_lookup.get(raw_id)
+            if issue_id is None or issue_id in seen:
+                return
+            seen.add(issue_id)
+            normalized_issue_ids.append(issue_id)
+
+        for raw_id in cluster.get("issue_ids", []):
+            _append(raw_id)
+
+        for step in cluster.get("action_steps", []):
+            if not isinstance(step, dict):
+                continue
+            for raw_id in step.get("issue_refs", []):
+                _append(raw_id)
+
+        cluster_name = cluster.get("name")
+        if isinstance(cluster_name, str):
+            for raw_id in recovered_members.get(cluster_name, []):
+                _append(raw_id)
+
+        cluster["issue_ids"] = normalized_issue_ids
         cluster.setdefault("auto", False)
         cluster.setdefault("cluster_key", "")
         cluster.setdefault("action", None)
