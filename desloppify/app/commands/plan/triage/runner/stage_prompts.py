@@ -100,6 +100,31 @@ def _format_assessments_table(assessments: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_assessment_file_evidence(assessments: list[dict]) -> str:
+    """Format file-level observe evidence for clustering-heavy downstream stages."""
+    if not assessments:
+        return ""
+    lines = ["### Observe File Evidence\n"]
+    for assessment in assessments:
+        issue_hash = str(assessment.get("hash", "?"))
+        files_read = [
+            str(path).strip()
+            for path in assessment.get("files_read", [])
+            if str(path).strip()
+        ]
+        verdict = str(assessment.get("verdict", "?")).strip() or "?"
+        reasoning = str(assessment.get("verdict_reasoning", "")).strip()
+        recommendation = str(assessment.get("recommendation", "")).strip()
+        lines.append(f"- {issue_hash}: {verdict}")
+        if files_read:
+            lines.append(f"  files_read: {', '.join(files_read)}")
+        if reasoning:
+            lines.append(f"  verdict_reasoning: {reasoning}")
+        if recommendation:
+            lines.append(f"  recommendation: {recommendation}")
+    return "\n".join(lines)
+
+
 def _relevant_prior_reports(
     stage: str,
     prior_reports: dict[str, str],
@@ -122,6 +147,10 @@ def _relevant_prior_reports(
             table = _format_assessments_table(assessments)
             if table:
                 result.append(("observe-assessments", table))
+        if stage == "organize":
+            evidence = _format_assessment_file_evidence(assessments)
+            if evidence:
+                result.append(("observe-evidence", evidence))
 
     return result
 

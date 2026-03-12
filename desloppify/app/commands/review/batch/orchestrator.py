@@ -193,7 +193,6 @@ def _build_batch_run_deps(*, policy, project_root: Path) -> review_batches_mod.B
         run_followup_scan_fn=partial(
             run_followup_scan,
             deps=followup_scan_deps,
-            force_queue_bypass=True,
         ),
         safe_write_text_fn=safe_write_text,
         colorize_fn=colorize,
@@ -572,5 +571,4 @@ def do_import_run(
                     timeout_error=subprocess.TimeoutExpired,
                     colorize_fn=colorize,
                 ),
-                force_queue_bypass=True,
             )

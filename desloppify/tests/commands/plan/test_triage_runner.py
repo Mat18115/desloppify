@@ -90,6 +90,33 @@ def test_build_organize_prompt_uses_compact_issue_summary_and_relevant_prior_rep
     assert "## Issue Data" not in prompt
 
 
+def test_build_organize_prompt_carries_observe_file_evidence_forward(tmp_path: Path) -> None:
+    si = _make_triage_input()
+    prior = {"reflect": "Cluster blueprint goes here."}
+    prompt = build_stage_prompt(
+        "organize",
+        si,
+        prior,
+        repo_root=tmp_path,
+        stages_data={
+            "observe": {
+                "assessments": [
+                    {
+                        "hash": "abcd0000",
+                        "verdict": "genuine",
+                        "verdict_reasoning": "Shared files line up around the same module seam.",
+                        "files_read": ["src/foo0.ts", "src/shared.ts"],
+                        "recommendation": "Cluster these around the shared module edit.",
+                    }
+                ]
+            }
+        },
+    )
+    assert "### OBSERVE-EVIDENCE Report" in prompt
+    assert "files_read: src/foo0.ts, src/shared.ts" in prompt
+    assert "Shared files line up around the same module seam." in prompt
+
+
 def test_build_reflect_prompt_output_only_for_codex_runner(tmp_path: Path) -> None:
     si = _make_triage_input()
     prior = {"observe": "My observation report about themes and root causes."}

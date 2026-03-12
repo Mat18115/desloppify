@@ -131,6 +131,30 @@ def test_run_followup_scan_handles_force_bypass_timeout_and_oserror(
     assert "Follow-up scan failed: boom" in out.err
 
 
+def test_run_followup_scan_default_does_not_force_queue_bypass(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    code = codex_batch_mod.run_followup_scan(
+        lang_name="python",
+        scan_path="src",
+        deps=SimpleNamespace(
+            python_executable="python",
+            project_root=tmp_path,
+            timeout_seconds=10,
+            subprocess_run=lambda cmd, *, cwd, timeout: (
+                calls.append(cmd),
+                SimpleNamespace(returncode=0),
+            )[1],
+            timeout_error=TimeoutError,
+            colorize_fn=lambda text, _style: text,
+        ),
+    )
+
+    assert code == 0
+    assert "--force-rescan" not in calls[0]
+    assert "--attest" not in calls[0]
+
+
 def test_make_run_log_writer_appends_timestamped_lines_and_ignores_oserror(
     monkeypatch,
     tmp_path: Path,
