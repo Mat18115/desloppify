@@ -200,6 +200,10 @@ def test_load_all_propagates_unexpected_user_plugin_errors(monkeypatch, tmp_path
 
 
 def test_reset_runtime_state_clears_registry_and_hooks():
+    saved_registry = {name: registry_state.get(name) for name in registry_state.all_keys()}
+    saved_attempted = registry_state.was_load_attempted()
+    saved_errors = dict(registry_state.get_load_errors())
+
     registry_state.register("python", object())
     registry_state.register_hook("python", "test_coverage", object())
 
@@ -207,3 +211,9 @@ def test_reset_runtime_state_clears_registry_and_hooks():
 
     assert registry_state.all_keys() == []
     assert registry_state.get_hook("python", "test_coverage") is None
+
+    # Restore original state so subsequent tests find all languages registered.
+    for name, cfg in saved_registry.items():
+        registry_state.register(name, cfg)
+    registry_state.set_load_attempted(saved_attempted)
+    registry_state.set_load_errors(saved_errors)
