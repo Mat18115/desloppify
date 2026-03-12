@@ -60,8 +60,9 @@ def _load_state_with_guards(
     state_file = state_path(args)
     state = state_mod.load_state(state_file)
 
-    if _check_queue_order_guard(state, args.patterns, args.status):
-        return None
+    if not getattr(args, "force_resolve", False):
+        if _check_queue_order_guard(state, args.patterns, args.status):
+            return None
 
     if args.status == "fixed":
         require_triage_current_or_exit(

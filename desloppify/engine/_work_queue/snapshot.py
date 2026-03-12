@@ -76,7 +76,6 @@ def _resolved_scan_path(options: object | None, state: StateModel) -> str | None
     return scan_path
 
 
-
 def _is_fresh_boundary(plan: dict | None) -> bool:
     if not isinstance(plan, dict):
         return True

@@ -27,8 +27,8 @@ NON_OBJECTIVE_DETECTORS: frozenset[str] = frozenset({
 class SubjectiveVisibility:
     """Immutable snapshot of the subjective-vs-objective balance."""
 
-    has_objective_backlog: bool  # any open non-subjective issues?
-    objective_count: int  # how many
+    has_objective_backlog: bool  # any planned open non-subjective issues?
+    objective_count: int  # how many (planned only, post-triage)
     unscored_ids: frozenset[str]  # subjective::* IDs needing initial review
     stale_ids: frozenset[str]  # subjective::* IDs needing re-review
     under_target_ids: frozenset[str]  # below target, not stale/unscored

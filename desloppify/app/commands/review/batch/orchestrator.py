@@ -164,6 +164,7 @@ def _run_followup_scan_with_deps(
         lang_name=lang_name,
         scan_path=scan_path,
         deps=deps,
+        force_queue_bypass=True,
     )
 
 
@@ -605,4 +606,5 @@ def do_import_run(
                     timeout_error=subprocess.TimeoutExpired,
                     colorize_fn=colorize,
                 ),
+                force_queue_bypass=True,
             )

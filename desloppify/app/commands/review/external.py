@@ -562,6 +562,7 @@ def do_external_submit(
                 timeout_error=subprocess.TimeoutExpired,
                 colorize_fn=colorize,
             ),
+            force_queue_bypass=True,
         )
         if code != 0:
             raise CommandError(f"External review exited with code {code}", exit_code=code)

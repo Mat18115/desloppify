@@ -349,21 +349,21 @@ def cmd_plan_backlog(args: argparse.Namespace) -> None:
         print(colorize("  No matching issues found.", "yellow"))
         return
 
-    count = backlog_items(plan, issue_ids)
-    if not count:
+    removed = backlog_items(plan, issue_ids)
+    if not removed:
         print(colorize("  No matching deferred items found.", "yellow"))
         return
 
     append_log_entry(
         plan,
         "backlog",
-        issue_ids=issue_ids[:count],
+        issue_ids=removed,
         actor="user",
     )
-    clear_postflight_scan_completion(plan, issue_ids=issue_ids)
+    clear_postflight_scan_completion(plan, issue_ids=removed)
     save_plan(plan, plan_file)
 
-    print(colorize(f"  Moved {count} item(s) to backlog.", "green"))
+    print(colorize(f"  Moved {len(removed)} item(s) to backlog.", "green"))
 
 
 __all__ = [

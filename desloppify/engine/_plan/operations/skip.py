@@ -169,18 +169,19 @@ def resurface_stale_skips(
     return resurfaced
 
 
-def backlog_items(plan: PlanModel, issue_ids: list[str]) -> int:
+def backlog_items(plan: PlanModel, issue_ids: list[str]) -> list[str]:
     """Remove from plan.skipped without adding to queue_order.
 
     Issues stay open in state but are no longer plan-tracked.
+    Returns the IDs that were actually removed.
     """
     ensure_plan_defaults(plan)
-    count = 0
+    removed: list[str] = []
     for fid in issue_ids:
         if fid in plan["skipped"]:
             plan["skipped"].pop(fid)
-            count += 1
-    return count
+            removed.append(fid)
+    return removed
 
 
 __all__ = ["backlog_items", "resurface_stale_skips", "skip_items", "unskip_items"]

@@ -57,7 +57,7 @@ def _cmd_commit_log_status(plan: dict) -> None:
         print(colorize("\n  No commit tracking data yet.", "dim"))
         print(
             colorize(
-                "  Resolve issues with `desloppify resolve` or `desloppify plan resolve` to start.",
+                "  Resolve issues with `desloppify plan resolve` to start.",
                 "dim",
             )
         )

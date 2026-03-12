@@ -58,7 +58,7 @@ def print_cluster_guard(cluster_name: str, issue_ids: list[str], state: dict) ->
         print(f"    {issue_id}  [{detector}]  {summary}")
     print(
         colorize(
-            "\n  Use: desloppify resolve <id> --status fixed --note '...' --attest '...'",
+            "\n  Use: desloppify plan resolve <id> --status fixed --note '...' --attest '...'",
             "dim",
         )
     )

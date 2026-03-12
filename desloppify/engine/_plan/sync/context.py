@@ -26,11 +26,11 @@ def has_objective_backlog(
     state_or_issues: StateModel | dict,
     policy: SubjectiveVisibility | None,
 ) -> bool:
-    """Return whether an objective backlog exists (open non-subjective issues).
+    """Return whether a planned objective backlog exists.
 
-    Prefers the pre-computed *policy* snapshot when available.
-    Falls back to scanning *state_or_issues* directly — accepts either a
-    full ``StateModel`` (looks up ``issues``) or a raw issues dict.
+    Prefers the pre-computed *policy* snapshot when available (plan-aware:
+    only counts planned objectives post-triage).  Falls back to scanning
+    *state_or_issues* directly (counts all open non-subjective issues).
     """
     if policy is not None:
         return policy.has_objective_backlog
