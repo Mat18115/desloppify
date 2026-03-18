@@ -53,6 +53,33 @@ Use `plan` / `plan queue` to reorder priorities or cluster related issues. Resca
 The scan output includes agent instructions — follow them, don't substitute your own analysis.
 ```
 
+## How it works
+
+```
+scan ──→ score ──→ review ──→ triage ──→ execute ──→ rescan
+  │         │         │          │          │           │
+  │     dimensions    │     prioritize    fix it     verify
+  │     scored      LLM reviews  & cluster  & resolve  improvements
+  │                 subjective   the queue
+  │                 quality
+  detectors find
+  mechanical issues
+  (dead code, smells,
+  test gaps, etc.)
+```
+
+**Scan** runs mechanical detectors across your codebase — dead code, duplication, complexity, test coverage gaps, naming issues, and more. Each issue is scored by dimension (File health, Code quality, Test health, etc.).
+
+**Review** uses an LLM to assess subjective quality dimensions — naming, abstractions, error handling patterns, module boundaries. These score alongside the mechanical dimensions.
+
+**Triage** is where prioritization happens. The agent (or you) observes the findings, reflects on patterns, organizes issues into clusters, and enriches them with implementation detail. This produces an ordered execution queue — only items explicitly queued appear in `next`. Before triage, all mechanical issues are visible in the queue sorted by impact, which can be noisy.
+
+**Execute** is the fix loop: `next` → fix → `resolve` → `next`. Items come from the triaged queue. Autofix handles what it can; the rest needs manual or agent work.
+
+**Rescan** verifies improvements, catches cascading effects, and feeds the next cycle.
+
+State persists in `.desloppify/` so progress carries across sessions. The scoring resists gaming — wontfix items widen the gap between lenient and strict scores, and re-reviewing dimensions can lower scores if the reviewer finds new issues.
+
 ## From Vibe Coding to Vibe Engineering
 
 Vibe coding gets things built fast. But the codebases it produces tend to rot in ways that are hard to see and harder to fix — not just the mechanical stuff like dead imports, but the structural kind. Abstractions that made sense at first stop making sense. Naming drifts. Error handling is done three different ways. The codebase works, but working in it gets worse over time.
